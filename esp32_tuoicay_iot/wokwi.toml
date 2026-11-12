@@ -1,0 +1,9 @@
+[wokwi]
+version = 1
+firmware = ".pio/build/esp32doit-devkit-v1/firmware.bin"
+elf = ".pio/build/esp32doit-devkit-v1/firmware.elf"
+
+# Ánh xạ cổng Web cấu hình ESP32 trong Wokwi ra http://localhost:8180
+[[net.forward]]
+from = "localhost:8180"
+to = "target:80"

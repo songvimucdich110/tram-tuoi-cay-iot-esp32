@@ -1,0 +1,366 @@
+{
+  "version": 1,
+  "author": "Tram Tuoi Cay Tu Dong IoT - Anh Tuong",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-text",
+      "id": "title_banner",
+      "top": -115,
+      "left": -135,
+      "attrs": {
+        "text": "MO PHONG WOKWI: TRAM TUOI CAY TU DONG IOT (ESP32 38-PIN)\nTu dong tuoi Ban Dem khi Do am < 40%, Ngat tuc thi khi >= 70% | Khoa an toan Phao can"
+      }
+    },
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp",
+      "top": 40,
+      "left": 15,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lbl_soil",
+      "top": -55,
+      "left": -330,
+      "attrs": {
+        "text": "1. CAM BIEN DO AM DAT v1.2 (GPIO 34)\nXoay trai = Uot (100%) | Xoay phai = Kho (<40%)"
+      }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot_soil",
+      "top": -10,
+      "left": -245,
+      "attrs": {
+        "value": "450"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lbl_ldr",
+      "top": 95,
+      "left": -330,
+      "attrs": {
+        "text": "2. CAM BIEN ANH SANG LDR (GPIO 25)\nBam vao cam bien keo Lux: Sang(Ngay) / Toi(Dem)"
+      }
+    },
+    {
+      "type": "wokwi-photoresistor-sensor",
+      "id": "ldr1",
+      "top": 145,
+      "left": -305,
+      "attrs": {
+        "threshold": "2.5"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lbl_float",
+      "top": 240,
+      "left": -330,
+      "attrs": {
+        "text": "3. PHAO CHONG CAN BON NUOC (GPIO 33)\nGat Trai = DAY NUOC | Gat Phai = CAN NUOC"
+      }
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "sw_float",
+      "top": 290,
+      "left": -235,
+      "attrs": {
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lbl_btns",
+      "top": 355,
+      "left": -330,
+      "attrs": {
+        "text": "4. NUT NHAN VAT LY:\nXanh la (GPIO 14): AUTO/MANUAL (Giu 5s Reset EEPROM)\nXanh duong (GPIO 12): BAT/TAT BOM (Che do MANUAL)"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_mode",
+      "top": 420,
+      "left": -260,
+      "attrs": {
+        "color": "green",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_pump",
+      "top": 420,
+      "left": -150,
+      "attrs": {
+        "color": "blue",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lbl_lcd",
+      "top": -60,
+      "left": 215,
+      "attrs": {
+        "text": "5. MAN HINH LCD 16x2 I2C (0x27)\nSDA: GPIO 21 | SCL: GPIO 22"
+      }
+    },
+    {
+      "type": "wokwi-lcd1602",
+      "id": "lcd1",
+      "top": -15,
+      "left": 215,
+      "attrs": {
+        "pins": "i2c"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lbl_relay",
+      "top": 150,
+      "left": 215,
+      "attrs": {
+        "text": "6. MODULE RELAY + MAY BOM NUOC (GPIO 26)\nRelay HIGH -> Tiep diem NO dong -> Den Bom sang"
+      }
+    },
+    {
+      "type": "wokwi-relay-module",
+      "id": "relay1",
+      "top": 195,
+      "left": 225,
+      "attrs": {
+        "transistor": "npn"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_pump",
+      "top": 225,
+      "left": 375,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_pump",
+      "top": 185,
+      "left": 455,
+      "attrs": {
+        "color": "cyan",
+        "label": "MAY BOM"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lbl_alarm",
+      "top": 320,
+      "left": 215,
+      "attrs": {
+        "text": "7. LED DO CANH BAO CAN NUOC (GPIO 4)\nNhay 300ms khi Can Nuoc | 800ms khi AP Mode"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_alarm",
+      "top": 380,
+      "left": 225,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_alarm",
+      "top": 345,
+      "left": 315,
+      "attrs": {
+        "color": "red",
+        "label": "BAO CAN"
+      }
+    }
+  ],
+  "connections": [
+    [
+      "esp:TX0",
+      "$serialMonitor:RX",
+      "",
+      []
+    ],
+    [
+      "esp:RX0",
+      "$serialMonitor:TX",
+      "",
+      []
+    ],
+    [
+      "pot_soil:VCC",
+      "esp:3V3",
+      "red",
+      []
+    ],
+    [
+      "pot_soil:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "pot_soil:SIG",
+      "esp:D34",
+      "green",
+      []
+    ],
+    [
+      "ldr1:VCC",
+      "esp:3V3",
+      "red",
+      []
+    ],
+    [
+      "ldr1:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "ldr1:DO",
+      "esp:D25",
+      "gold",
+      []
+    ],
+    [
+      "sw_float:1",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "sw_float:2",
+      "esp:D33",
+      "cyan",
+      []
+    ],
+    [
+      "sw_float:3",
+      "esp:3V3",
+      "orange",
+      []
+    ],
+    [
+      "btn_mode:1.r",
+      "esp:D14",
+      "limegreen",
+      []
+    ],
+    [
+      "btn_mode:2.r",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "btn_pump:1.r",
+      "esp:D12",
+      "dodgerblue",
+      []
+    ],
+    [
+      "btn_pump:2.r",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "lcd1:VCC",
+      "esp:VIN",
+      "red",
+      []
+    ],
+    [
+      "lcd1:GND",
+      "esp:GND.2",
+      "black",
+      []
+    ],
+    [
+      "lcd1:SDA",
+      "esp:D21",
+      "purple",
+      []
+    ],
+    [
+      "lcd1:SCL",
+      "esp:D22",
+      "yellow",
+      []
+    ],
+    [
+      "relay1:VCC",
+      "esp:VIN",
+      "red",
+      []
+    ],
+    [
+      "relay1:GND",
+      "esp:GND.2",
+      "black",
+      []
+    ],
+    [
+      "relay1:IN",
+      "esp:D26",
+      "orange",
+      []
+    ],
+    [
+      "relay1:COM",
+      "esp:VIN",
+      "red",
+      []
+    ],
+    [
+      "relay1:NO",
+      "r_pump:1",
+      "cyan",
+      []
+    ],
+    [
+      "r_pump:2",
+      "led_pump:A",
+      "cyan",
+      []
+    ],
+    [
+      "led_pump:C",
+      "esp:GND.2",
+      "black",
+      []
+    ],
+    [
+      "esp:D4",
+      "r_alarm:1",
+      "red",
+      []
+    ],
+    [
+      "r_alarm:2",
+      "led_alarm:A",
+      "red",
+      []
+    ],
+    [
+      "led_alarm:C",
+      "esp:GND.2",
+      "black",
+      []
+    ]
+  ],
+  "dependencies": {}
+}

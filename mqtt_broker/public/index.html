@@ -1,0 +1,3160 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trạm Tưới Cây Tự Động IoT 1 Vùng Tưới - Smart Dashboard</title>
+  <!-- Local Libraries -->
+  <script src="mqtt.min.js"></script>
+  <script src="chart.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #0b111e;
+      --card-bg: linear-gradient(165deg, rgba(20, 30, 48, 0.92), rgba(13, 20, 34, 0.95));
+      --card-border: rgba(56, 189, 248, 0.16);
+      --accent: #10b981;
+      --accent-glow: rgba(16, 185, 129, 0.35);
+      --danger: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.4);
+      --warning: #f59e0b;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --cyan: #06b6d4;
+      --indigo: #818cf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 16px 22px 40px;
+      background-image:
+        radial-gradient(circle at 12% 12%, rgba(16, 185, 129, 0.09) 0%, transparent 38%),
+        radial-gradient(circle at 88% 20%, rgba(14, 165, 233, 0.09) 0%, transparent 38%),
+        radial-gradient(circle at 50% 90%, rgba(99, 102, 241, 0.06) 0%, transparent 45%);
+    }
+
+    /* Header Bar */
+    .top-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 20px;
+    }
+
+    .header-title h1 {
+      font-size: 21px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-title p {
+      font-size: 12.5px;
+      color: var(--text-sub);
+      margin-top: 4px;
+    }
+
+    .header-badges {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+    }
+
+    .badge-dot.connected {
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent);
+    }
+
+    /* Main Grid Layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 16px 18px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      min-width: 0;
+    }
+
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      color: #e2e8f0;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .sensor-icon-box {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      background: rgba(30, 41, 59, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+    }
+
+    /* ==================== HÀNG 1: 4 THẺ MÔ PHỎNG CẢM BIẾN SINH ĐỘNG ==================== */
+    .vivid-sensor-card {
+      grid-column: span 6;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.2s ease, border-color 0.25s ease;
+    }
+
+    .vivid-sensor-card:hover {
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+
+    @media (min-width: 1620px) {
+      .vivid-sensor-card {
+        grid-column: span 3;
+      }
+    }
+
+    .mode-pill-tag {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      padding: 4px 9px;
+      border-radius: 7px;
+      background: rgba(30, 58, 138, 0.35);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      color: #7dd3fc;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    /* Nút chuyển chế độ hiển thị Mặt cắt đất / Kim bán nguyệt */
+    .view-switch-group {
+      display: inline-flex;
+      gap: 4px;
+      background: rgba(15, 23, 42, 0.85);
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .view-switch-btn {
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .view-switch-btn.active {
+      background: rgba(16, 185, 129, 0.22);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.5);
+    }
+
+    .vivid-top-metrics {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 4px 0 8px;
+      gap: 8px;
+    }
+
+    .vivid-main-value {
+      font-size: 30px;
+      font-weight: 800;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.5px;
+      line-height: 1.1;
+    }
+
+    .vivid-main-value small {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-sub);
+      margin-left: 3px;
+    }
+
+    .raw-chip {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #94a3b8;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      padding: 3px 9px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+
+    .vivid-stage {
+      width: 100%;
+      height: 158px;
+      border-radius: 12px;
+      background: rgba(9, 14, 26, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .vivid-stage svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .vivid-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .vivid-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+      background: rgba(16, 185, 129, 0.16);
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      color: #34d399;
+      white-space: nowrap;
+    }
+
+    .vivid-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .vivid-caption {
+      font-size: 11px;
+      color: #64748b;
+      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ==================== KEYFRAMES SINH ĐỘNG ==================== */
+    @keyframes sunRotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes cloudDrift1 {
+      0%, 100% { transform: translateX(0px); }
+      50% { transform: translateX(14px); }
+    }
+
+    @keyframes cloudDrift2 {
+      0%, 100% { transform: translateX(0px); }
+      50% { transform: translateX(-12px); }
+    }
+
+    @keyframes starTwinkle {
+      0%, 100% { opacity: 0.25; transform: scale(0.85); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+
+    @keyframes waveSlide {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-120px); }
+    }
+
+    @keyframes buoyBob {
+      0%, 100% { transform: translateY(0px) rotate(-1.5deg); }
+      50% { transform: translateY(-3.5px) rotate(1.5deg); }
+    }
+
+    @keyframes bubbleRise {
+      0% { transform: translateY(0) scale(0.8); opacity: 0.75; }
+      100% { transform: translateY(-48px) scale(1.2); opacity: 0; }
+    }
+
+    @keyframes dropFall {
+      0% { transform: translateY(-6px); opacity: 0; }
+      30% { opacity: 1; }
+      100% { transform: translateY(26px); opacity: 0; }
+    }
+
+    .sun-rays-spin {
+      transform-origin: 170px 56px;
+      animation: sunRotate 18s linear infinite;
+    }
+
+    .cloud-anim-1 { animation: cloudDrift1 7s ease-in-out infinite; }
+    .cloud-anim-2 { animation: cloudDrift2 9s ease-in-out infinite; }
+    .star-twinkle-1 { animation: starTwinkle 2.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .star-twinkle-2 { animation: starTwinkle 3.1s ease-in-out 0.8s infinite; transform-box: fill-box; transform-origin: center; }
+    .star-twinkle-3 { animation: starTwinkle 2.7s ease-in-out 1.4s infinite; transform-box: fill-box; transform-origin: center; }
+
+    .wave-anim-front { animation: waveSlide 3.6s linear infinite; }
+    .wave-anim-back { animation: waveSlide 5.5s linear infinite reverse; }
+    .buoy-bob-inner { animation: buoyBob 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .tank-bubble-1 { animation: bubbleRise 2.8s ease-in infinite; }
+    .tank-bubble-2 { animation: bubbleRise 3.4s ease-in 1.1s infinite; }
+    .tank-bubble-3 { animation: bubbleRise 2.4s ease-in 0.5s infinite; }
+
+    .water-drop-1 { animation: dropFall 1.1s linear infinite; }
+    .water-drop-2 { animation: dropFall 1.1s linear 0.35s infinite; }
+    .water-drop-3 { animation: dropFall 1.1s linear 0.7s infinite; }
+
+    .smooth-needle {
+      transform-origin: 160px 124px;
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .smooth-level {
+      transition: all 0.75s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ==================== HÀNG 2: VÙNG TƯỚI & ĐIỀU KHIỂN + RESET EEPROM ==================== */
+    .zone-card {
+      grid-column: span 7;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .voltage-pill {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--cyan);
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid var(--cyan);
+      padding: 3px 10px;
+      border-radius: 8px;
+    }
+
+    .zone-big-num {
+      font-size: 48px;
+      font-weight: 800;
+      color: #fff;
+      margin: 6px 0;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 14px;
+      background: #1e293b;
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 10px 0;
+      position: relative;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #10b981, #06b6d4);
+      transition: width 0.5s ease, background 0.3s;
+      border-radius: 8px;
+    }
+
+    .zone-status-text {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .control-card {
+      grid-column: span 5;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .danger-alert-banner {
+      display: none;
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 700;
+      margin-top: 6px;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .ctrl-btn {
+      padding: 13px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: #1e293b;
+      color: #fff;
+      font-weight: 700;
+      font-size: 12.5px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+
+    .ctrl-btn:hover:not(:disabled) {
+      background: #334155;
+      transform: translateY(-2px);
+    }
+
+    .ctrl-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      border-color: #334155;
+    }
+
+    .btn-mode.auto {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: var(--accent);
+      color: #6ee7b7;
+    }
+
+    .btn-pump.active {
+      background: rgba(6, 182, 212, 0.25);
+      border-color: var(--cyan);
+      color: #a5f3fc;
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.4);
+    }
+
+    /* Khu vực Trang Web Cấu Hình & Nút Reset EEPROM */
+    .eeprom-config-box {
+      border-top: 1px dashed rgba(255, 255, 255, 0.12);
+      padding-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .eeprom-config-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #cbd5e1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .eeprom-btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1.35fr;
+      gap: 8px;
+    }
+
+    .btn-open-config {
+      padding: 10px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      background: rgba(14, 165, 233, 0.15);
+      color: #7dd3fc;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      text-decoration: none;
+    }
+
+    .btn-open-config:hover {
+      background: rgba(14, 165, 233, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .btn-reset-eeprom {
+      padding: 10px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(239, 68, 68, 0.7);
+      background: linear-gradient(135deg, rgba(220, 38, 38, 0.28), rgba(153, 27, 27, 0.35));
+      color: #fecaca;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-reset-eeprom:hover {
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(239, 68, 68, 0.5);
+      transform: translateY(-1px);
+    }
+
+    /* HÀNG 3: 4 ĐỒ THỊ THỜI GIAN THỰC (MỖI ĐỒ THỊ 1 PHONG CÁCH RIÊNG) */
+    .chart-card {
+      grid-column: span 6;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .chart-container {
+      height: 195px;
+      width: 100%;
+      margin-top: 8px;
+      position: relative;
+    }
+
+    /* Giao diện riêng Đồ thị 2: Phổ Cột Điện Áp Tím Cyber */
+    .chart-style-violet {
+      border-top: 3px solid #a855f7;
+      background: linear-gradient(165deg, rgba(29, 18, 56, 0.92), rgba(14, 17, 34, 0.96));
+    }
+
+    .volt-kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 6px 0 4px;
+    }
+
+    .volt-kpi-box {
+      background: rgba(168, 85, 247, 0.1);
+      border: 1px solid rgba(168, 85, 247, 0.28);
+      border-radius: 8px;
+      padding: 5px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11.5px;
+    }
+
+    .volt-kpi-box span { color: var(--text-sub); font-weight: 600; }
+    .volt-kpi-box b { color: #e9d5ff; font-family: Consolas, monospace; font-size: 13px; }
+
+    /* Giao diện riêng Đồ thị 3: Bảng Phân Tích Kép Phao Nước (Doughnut + Xung Logic) */
+    .chart-style-ocean {
+      border-top: 3px solid #0ea5e9;
+      background: linear-gradient(165deg, rgba(12, 32, 56, 0.94), rgba(10, 19, 36, 0.96));
+    }
+
+    .float-dual-layout {
+      display: grid;
+      grid-template-columns: 148px 1fr;
+      gap: 12px;
+      align-items: center;
+      margin-top: 6px;
+      height: 198px;
+    }
+
+    .float-doughnut-box {
+      height: 184px;
+      background: rgba(8, 17, 34, 0.65);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      border-radius: 12px;
+      padding: 8px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .float-doughnut-canvas-wrap {
+      width: 118px;
+      height: 118px;
+      position: relative;
+    }
+
+    .float-doughnut-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      font-weight: 800;
+      font-size: 15px;
+      color: #38bdf8;
+    }
+
+    .float-doughnut-center small {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+
+    .float-doughnut-legend {
+      margin-top: 8px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #cbd5e1;
+      text-align: center;
+    }
+
+    .float-scope-box {
+      height: 184px;
+      background-color: rgba(6, 13, 26, 0.8);
+      background-image:
+        linear-gradient(rgba(56, 189, 248, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(56, 189, 248, 0.07) 1px, transparent 1px);
+      background-size: 18px 18px;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 12px;
+      padding: 8px 10px 4px;
+      position: relative;
+    }
+
+    /* Giao diện riêng Đồ thị 4: Kẹo Mút Quang Học Ánh Sáng (Solar Lollipop) */
+    .chart-style-solar {
+      border-top: 3px solid #f59e0b;
+      background: linear-gradient(165deg, rgba(44, 29, 14, 0.9), rgba(16, 20, 38, 0.96));
+    }
+
+    .solar-stats-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 6px 0 4px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(251, 191, 36, 0.25);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+
+    .solar-ratio-track {
+      flex: 1;
+      height: 7px;
+      background: #4f46e5;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .solar-ratio-fill {
+      height: 100%;
+      width: 50%;
+      background: linear-gradient(90deg, #facc15, #f97316);
+      transition: width 0.4s ease;
+    }
+
+    /* Thanh công cụ MySQL & Nút Chuyển Giao Diện Sáng / Tối */
+    .theme-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #f59e0b, #ea580c);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 2px 10px rgba(245, 158, 11, 0.3);
+    }
+
+    .theme-toggle-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.5);
+    }
+
+    .mysql-card {
+      grid-column: span 12;
+      border-top: 3px solid #0284c7;
+    }
+
+    .mysql-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-mysql-action {
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+
+    .btn-mysql-push {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: rgba(16, 185, 129, 0.5);
+      color: #34d399;
+    }
+    .btn-mysql-push:hover { background: #059669; color: #fff; }
+
+    .btn-mysql-reload {
+      background: rgba(51, 65, 85, 0.85);
+      color: #e2e8f0;
+    }
+    .btn-mysql-reload:hover { background: #475569; }
+
+    .btn-mysql-clear {
+      background: rgba(220, 38, 38, 0.24);
+      border-color: rgba(239, 68, 68, 0.65);
+      color: #fca5a5;
+    }
+    .btn-mysql-clear:hover {
+      background: #dc2626;
+      color: #fff;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
+    }
+
+    .btn-del-row {
+      background: rgba(239, 68, 68, 0.16);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+      border-radius: 5px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-del-row:hover { background: #ef4444; color: #fff; }
+
+    /* ==================== CHẾ ĐỘ GIAO DIỆN SÁNG (MÀU TRẮNG) ==================== */
+    body.light-theme {
+      --bg-color: #f1f5f9;
+      --card-bg: #ffffff;
+      --card-border: #cbd5e1;
+      --text-main: #0f172a;
+      --text-sub: #475569;
+      background-image:
+        radial-gradient(circle at 12% 10%, rgba(16, 185, 129, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 88% 18%, rgba(14, 165, 233, 0.08) 0%, transparent 40%);
+    }
+
+    body.light-theme .top-header {
+      border-bottom-color: #cbd5e1;
+    }
+
+    body.light-theme .header-title h1,
+    body.light-theme .card-title,
+    body.light-theme .vivid-main-value,
+    body.light-theme .zone-big-num {
+      color: #0f172a;
+    }
+
+    body.light-theme .badge {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #1e293b;
+      box-shadow: 0 2px 5px rgba(15, 23, 42, 0.05);
+    }
+
+    body.light-theme .theme-toggle-btn {
+      background: linear-gradient(135deg, #1e293b, #334155);
+      color: #f8fafc;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+    }
+
+    body.light-theme .card {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    body.light-theme .chart-style-violet {
+      background: linear-gradient(180deg, #faf5ff 0%, #ffffff 100%);
+      border-color: #d8b4fe;
+      border-top: 3px solid #9333ea;
+    }
+
+    body.light-theme .volt-kpi-box {
+      background: #f3e8ff;
+      border-color: #d8b4fe;
+    }
+    body.light-theme .volt-kpi-box b { color: #6b21a8; }
+
+    body.light-theme .chart-style-ocean {
+      background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%);
+      border-color: #bae6fd;
+      border-top: 3px solid #0284c7;
+    }
+
+    body.light-theme .float-doughnut-box {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+    body.light-theme .float-doughnut-legend { color: #334155; }
+
+    body.light-theme .float-scope-box {
+      background-color: #f8fafc;
+      background-image:
+        linear-gradient(rgba(2, 132, 199, 0.09) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(2, 132, 199, 0.09) 1px, transparent 1px);
+      border-color: #bae6fd;
+    }
+
+    body.light-theme .chart-style-solar {
+      background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%);
+      border-color: #fde68a;
+      border-top: 3px solid #d97706;
+    }
+
+    body.light-theme .solar-stats-bar {
+      background: #fef3c7;
+      border-color: #fcd34d;
+      color: #1e293b;
+    }
+
+    body.light-theme .sensor-icon-box,
+    body.light-theme .raw-chip,
+    body.light-theme .view-switch-group {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      color: #334155;
+    }
+
+    body.light-theme .mode-pill-tag {
+      background: #e0f2fe;
+      border-color: #7dd3fc;
+      color: #0369a1;
+    }
+
+    body.light-theme .vivid-stage {
+      background: #0f172a;
+      border-color: #334155;
+    }
+
+    body.light-theme .vivid-footer {
+      border-top-color: #e2e8f0;
+    }
+
+    body.light-theme .progress-bar-container {
+      background: #e2e8f0;
+    }
+
+    body.light-theme .ctrl-btn {
+      background: #f8fafc;
+      color: #0f172a;
+      border-color: #cbd5e1;
+    }
+    body.light-theme .ctrl-btn:hover:not(:disabled) {
+      background: #e2e8f0;
+    }
+    body.light-theme .btn-mode.auto {
+      background: #d1fae5;
+      border-color: #10b981;
+      color: #065f46;
+    }
+    body.light-theme .btn-pump.active {
+      background: #cffafe;
+      border-color: #06b6d4;
+      color: #0e7490;
+    }
+
+    body.light-theme .eeprom-config-box { border-top-color: #cbd5e1; }
+    body.light-theme .eeprom-config-title { color: #334155; }
+    body.light-theme .btn-open-config {
+      background: #e0f2fe;
+      color: #0369a1;
+      border-color: #38bdf8;
+    }
+    body.light-theme .btn-reset-eeprom {
+      background: #fee2e2;
+      color: #b91c1c;
+      border-color: #ef4444;
+    }
+
+    body.light-theme .schematic-container {
+      background: #0d1527;
+      border-radius: 12px;
+      padding: 10px;
+      border: 1px solid #cbd5e1;
+    }
+
+    body.light-theme .history-table-wrapper {
+      border-color: #cbd5e1;
+    }
+    body.light-theme th {
+      background: #f1f5f9;
+      color: #334155;
+      border-bottom: 1px solid #cbd5e1;
+    }
+    body.light-theme td {
+      color: #1e293b;
+      border-bottom-color: #e2e8f0;
+    }
+    body.light-theme tr:hover td {
+      background: #f8fafc;
+    }
+
+    body.light-theme .btn-mysql-push {
+      background: #d1fae5;
+      color: #065f46;
+      border-color: #10b981;
+    }
+    body.light-theme .btn-mysql-reload {
+      background: #f1f5f9;
+      color: #1e293b;
+      border-color: #cbd5e1;
+    }
+    body.light-theme .btn-mysql-clear {
+      background: #fee2e2;
+      color: #b91c1c;
+      border-color: #ef4444;
+    }
+
+    body.light-theme .modal-content {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #0f172a;
+    }
+    body.light-theme .modal-header h3 { color: #0f172a; }
+    body.light-theme .qr-url-box { background: #f1f5f9; border-color: #cbd5e1; }
+    body.light-theme .qr-note { background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; }
+
+    @media (max-width: 640px) {
+      .float-dual-layout { grid-template-columns: 1fr; height: auto; }
+    }
+
+    /* HÀNG 4 & 5: Sơ đồ nối dây & Lịch sử */
+    .schematic-card,
+    .history-card {
+      grid-column: span 12;
+    }
+
+    .schematic-container {
+      width: 100%;
+      overflow-x: auto;
+      margin-top: 12px;
+    }
+
+    .schematic-container svg {
+      width: 100%;
+      min-width: 860px;
+      height: 340px;
+      display: block;
+    }
+
+    .history-table-wrapper {
+      max-height: 260px;
+      overflow-y: auto;
+      margin-top: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    th {
+      background: #1e293b;
+      color: var(--text-sub);
+      padding: 10px 14px;
+      position: sticky;
+      top: 0;
+      font-weight: 600;
+    }
+
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: #e2e8f0;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    /* Responsive Breakpoints */
+    @media (max-width: 1100px) {
+      .zone-card,
+      .control-card {
+        grid-column: span 12;
+      }
+    }
+
+    @media (max-width: 880px) {
+      .vivid-sensor-card,
+      .chart-card {
+        grid-column: span 12;
+      }
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 12px 10px 30px; }
+      .header-title h1 { font-size: 17px; }
+      .eeprom-btn-row { grid-template-columns: 1fr; }
+      .card { padding: 14px; }
+    }
+
+    /* QR Code & Reset Modals */
+    .qr-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #2563eb, #06b6d4);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 2px 10px rgba(6, 182, 212, 0.3);
+    }
+
+    .qr-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(6, 182, 212, 0.5);
+    }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(8px);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.active { display: flex; }
+
+    .modal-content {
+      background: #151f38;
+      border: 1px solid #24345d;
+      border-radius: 16px;
+      max-width: 420px;
+      width: 100%;
+      padding: 22px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      text-align: center;
+      animation: modalPop 0.25s ease;
+    }
+
+    @keyframes modalPop {
+      from { transform: scale(0.9); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .modal-header h3 { font-size: 15px; color: #fff; font-weight: 700; }
+
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 24px;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .qr-image-wrapper {
+      background: #fff;
+      padding: 10px;
+      border-radius: 12px;
+      display: inline-block;
+      margin: 12px 0;
+    }
+
+    .qr-image-wrapper img { width: 220px; height: 220px; display: block; }
+
+    .qr-url-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0b1329;
+      border: 1px solid #24345d;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      gap: 8px;
+    }
+
+    .qr-url-box span {
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--cyan);
+      word-break: break-all;
+      text-align: left;
+    }
+
+    .copy-btn {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .qr-note {
+      font-size: 12px;
+      color: #94a3b8;
+      background: rgba(30, 41, 59, 0.5);
+      padding: 10px;
+      border-radius: 8px;
+      text-align: left;
+      line-height: 1.45;
+    }
+
+    .modal-action-btns {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .btn-cancel {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #cbd5e1;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-confirm-danger {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ef4444;
+      background: #dc2626;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Top Header -->
+  <header class="top-header">
+    <div class="header-title">
+      <h1>🌱 TRẠM TƯỚI CÂY TỰ ĐỘNG IOT (1 VÙNG TƯỚI)</h1>
+      <p>ESP32 WROOM 38-Pin | Mô Phỏng Trực Quan Sinh Động &amp; Đồ Thị Live | Cấu Hình EEPROM | Aedes &amp; SQLite</p>
+    </div>
+    <div class="header-badges">
+      <div class="badge">
+        <span class="badge-dot" id="wsStatusDot"></span>
+        <span id="wsStatusText">MQTT: Đang kết nối...</span>
+      </div>
+      <div class="badge" id="headerLightBadge">
+        <span id="lightIcon">☀️</span>
+        <span id="lightStatusText">Ánh sáng: CÓ SÁNG</span>
+      </div>
+      <div class="badge">
+        <span>🌐 Broker: </span>
+        <span id="brokerHostLabel" style="color:var(--cyan)">ws://127.0.0.1:9001</span>
+      </div>
+      <div class="badge">
+        <span>🕒 Cập nhật: </span>
+        <span id="lastUpdateLabel" style="color:#fcd34d">--:--:--</span>
+      </div>
+      <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Chuyển giao diện Trắng (Sáng) hoặc Đen (Tối) tùy thích">
+        <span id="themeToggleIcon">☀️</span>
+        <span id="themeToggleText">Giao Diện Trắng</span>
+      </button>
+      <a href="/wokwi.html" class="qr-btn" style="text-decoration:none;background:linear-gradient(135deg,#059669,#0284c7);" title="Mở bộ mô phỏng mạch Wokwi ESP32 đồng bộ trực tiếp">
+        <span style="font-size:14px">🧪</span>
+        <span>Mô Phỏng Wokwi</span>
+      </a>
+      <button class="qr-btn" onclick="openQrModal()" title="Quét mã QR để mở trên điện thoại">
+        <span style="font-size:14px">📱</span>
+        <span>Quét QR Điện Thoại</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Grid -->
+  <main class="dashboard-grid">
+
+    <!-- ==================== HÀNG 1: 4 THẺ MÔ PHỎNG CẢM BIẾN SINH ĐỘNG (KHÔNG CHỮ GAUGE Ở ĐẦU) ==================== -->
+
+    <!-- THẺ 1: ĐỘ ẨM ĐẤT (GPIO 34) - MẶT CẮT TẦNG ĐẤT SINH ĐỘNG + CHUYỂN ĐỔI KIM BÁN NGUYỆT -->
+    <section class="card vivid-sensor-card">
+      <div class="card-head">
+        <div class="card-title">
+          <span class="sensor-icon-box">🌱</span>
+          <span>ĐỘ ẨM ĐẤT (GPIO 34)</span>
+        </div>
+        <div class="view-switch-group">
+          <button class="view-switch-btn active" id="btnSoilCrossView" onclick="switchSoilView('cross')">🌱 MẶT CẮT ĐẤT</button>
+          <button class="view-switch-btn" id="btnSoilDialView" onclick="switchSoilView('dial')">🎯 KIM BÁN NGUYỆT</button>
+        </div>
+      </div>
+
+      <div class="vivid-top-metrics">
+        <div class="vivid-main-value" id="gaugeNumText">--<small>% RH</small></div>
+        <div class="raw-chip" id="soilRawChip">Raw: --</div>
+      </div>
+
+      <div class="vivid-stage">
+        <!-- Chế độ 1: Mặt cắt tầng đất & cây non sinh động -->
+        <svg id="soilCrossSvg" viewBox="0 0 340 154">
+          <defs>
+            <clipPath id="soilPotClip">
+              <rect x="16" y="42" width="194" height="98" rx="10" />
+            </clipPath>
+            <linearGradient id="drySoilGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#854d0e" />
+              <stop offset="100%" stop-color="#5c2d0c" />
+            </linearGradient>
+            <linearGradient id="wetWaterGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(14, 165, 233, 0.52)" />
+              <stop offset="100%" stop-color="rgba(3, 105, 161, 0.78)" />
+            </linearGradient>
+          </defs>
+
+          <!-- Hạt nước tưới rơi xuống khi Bơm BẬT -->
+          <g id="soilWateringDrops" style="display:none">
+            <circle cx="105" cy="14" r="2.8" fill="#38bdf8" class="water-drop-1" />
+            <circle cx="122" cy="10" r="3.2" fill="#06b6d4" class="water-drop-2" />
+            <circle cx="139" cy="15" r="2.8" fill="#38bdf8" class="water-drop-3" />
+          </g>
+
+          <!-- Khung mặt cắt tầng đất -->
+          <g clip-path="url(#soilPotClip)">
+            <rect x="16" y="42" width="194" height="98" fill="url(#drySoilGrad)" id="soilBaseFill" />
+            <!-- Mực nước ngầm dâng theo % độ ẩm -->
+            <g id="soilMoistureWaveGroup" class="smooth-level" style="transform: translateY(98px);">
+              <path d="M 0 6 Q 30 0 60 6 T 120 6 T 180 6 T 240 6 T 300 6 T 360 6 L 360 120 L 0 120 Z" fill="url(#wetWaterGrad)" class="wave-anim-front" />
+            </g>
+            <!-- Vết nứt đất khô hạn (<40%) -->
+            <g id="soilDryCracks" stroke="#ca8a04" stroke-width="1.4" fill="none" opacity="0.75">
+              <path d="M 80 43 L 75 58 L 83 70 L 77 82" />
+              <path d="M 168 43 L 174 56 L 166 68" />
+            </g>
+            <!-- Hạt khoáng trong đất -->
+            <circle cx="40" cy="118" r="2" fill="rgba(255,255,255,0.12)" />
+            <circle cx="95" cy="126" r="2.5" fill="rgba(255,255,255,0.1)" />
+            <circle cx="155" cy="112" r="2" fill="rgba(255,255,255,0.12)" />
+            <circle cx="185" cy="128" r="1.8" fill="rgba(255,255,255,0.1)" />
+          </g>
+          <!-- Viền chậu mặt cắt -->
+          <rect x="16" y="42" width="194" height="98" rx="10" fill="none" stroke="#d97706" stroke-width="2" id="soilPotBorder" />
+
+          <!-- Rễ cây đâm xuống tầng đất -->
+          <g stroke="#fde68a" stroke-width="1.7" fill="none" stroke-linecap="round" opacity="0.9">
+            <path d="M 122 42 Q 120 66 104 92" />
+            <path d="M 122 42 Q 124 72 140 98" />
+            <path d="M 115 64 Q 100 72 92 80" stroke-width="1.2" />
+            <path d="M 128 68 Q 144 75 152 84" stroke-width="1.2" />
+            <path d="M 122 54 L 121 106" stroke-width="1.3" />
+          </g>
+
+          <!-- Cây mầm xanh trên mặt đất -->
+          <g id="soilPlantSprout" style="transform-origin: 122px 42px; transition: transform 0.5s ease;">
+            <path d="M 122 42 Q 122 26 122 18" stroke="#22c55e" stroke-width="3" fill="none" stroke-linecap="round" id="plantStemPath" />
+            <ellipse cx="113" cy="21" rx="9" ry="5" transform="rotate(-24 113 21)" fill="#4ade80" id="plantLeafLeft" />
+            <ellipse cx="131" cy="19" rx="9.5" ry="5" transform="rotate(22 131 19)" fill="#22c55e" id="plantLeafRight" />
+          </g>
+
+          <!-- Đầu dò cảm biến điện dung v1.2 cắm trong đất -->
+          <g transform="translate(38, 18)">
+            <rect x="0" y="0" width="18" height="14" rx="2" fill="#0ea5e9" stroke="#bae6fd" stroke-width="1" />
+            <circle cx="9" cy="6" r="2" fill="#4ade80" />
+            <rect x="2" y="14" width="14" height="58" rx="2" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5" />
+            <line x1="6" y1="20" x2="6" y2="66" stroke="#fbbf24" stroke-width="1.5" />
+            <line x1="12" y1="20" x2="12" y2="66" stroke="#fbbf24" stroke-width="1.5" />
+          </g>
+
+          <!-- Cột thước đo mực ẩm bên phải -->
+          <rect x="222" y="34" width="14" height="106" rx="7" fill="#0f172a" stroke="#334155" stroke-width="1.5" />
+          <rect x="224" y="138" width="10" height="0" rx="5" fill="#10b981" id="soilVertBarFill" class="smooth-level" />
+
+          <!-- Thông số nổi bên phải -->
+          <text x="284" y="62" font-size="25" font-weight="800" fill="#fff" text-anchor="middle" id="soilSidePct">0%</text>
+          <text x="284" y="84" font-size="11.5" font-weight="800" fill="#ef4444" text-anchor="middle" id="soilSideState">🔥 KHÔ HẠN</text>
+          <text x="284" y="103" font-size="10.5" fill="#94a3b8" text-anchor="middle" id="soilSideHint">Cần cấp nước</text>
+          <text x="284" y="128" font-size="10" font-weight="700" fill="#64748b" text-anchor="middle">Chuẩn: 40-70%</text>
+        </svg>
+
+        <!-- Chế độ 2: Đồng hồ Kim Bán Nguyệt Đa Sắc (Giống thẻ đầu trong ảnh mẫu) -->
+        <svg id="soilDialSvg" viewBox="0 0 320 154" style="display:none">
+          <!-- Cung màu rực rỡ: Đỏ (0-40%) -> Vàng -> Xanh lá (40-70%) -> Đỏ sẫm (70-100%) -->
+          <path d="M 62 126 A 98 98 0 0 1 129.7 32.8" fill="none" stroke="#ef4444" stroke-width="14" stroke-linecap="round" />
+          <path d="M 135 31.2 A 98 98 0 0 1 217.6 46.7" fill="none" stroke="#10b981" stroke-width="14" />
+          <path d="M 222.5 50.3 A 98 98 0 0 1 258 126" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" />
+
+          <text x="44" y="138" font-size="10" fill="#ef4444" font-weight="700">0%</text>
+          <text x="118" y="23" font-size="10" fill="#94a3b8">40%</text>
+          <text x="222" y="40" font-size="10" fill="#10b981" font-weight="700">70%</text>
+          <text x="262" y="138" font-size="10" fill="#f59e0b" font-weight="700">100%</text>
+
+          <g class="smooth-needle" id="gaugeNeedle" style="transform: rotate(-90deg);">
+            <polygon points="157,124 160,38 163,124" fill="#ef4444" id="svgNeedlePoly" />
+            <circle cx="160" cy="124" r="8" fill="#0f172a" stroke="#ef4444" stroke-width="3" id="svgNeedleCenterRing" />
+            <circle cx="160" cy="124" r="3" fill="#fff" />
+          </g>
+          <text x="160" y="146" font-size="13" font-weight="800" fill="#34d399" text-anchor="middle" id="svgGaugeCenterNum">0% RH</text>
+        </svg>
+      </div>
+
+      <div class="vivid-footer">
+        <div class="vivid-status-pill" id="gaugeStatusBadge">
+          <span class="vivid-status-dot"></span>
+          <span id="gaugeStatusText">Chờ dữ liệu đất...</span>
+        </div>
+        <span class="vivid-caption">Mặt cắt tầng đất sinh động</span>
+      </div>
+    </section>
+
+    <!-- THẺ 2: ĐIỆN ÁP CẢM BIẾN (GPIO 34) - ĐỒNG HỒ VÒNG KHUYẾT NEON & KIM ĐA SẮC -->
+    <section class="card vivid-sensor-card">
+      <div class="card-head">
+        <div class="card-title">
+          <span class="sensor-icon-box">⚡</span>
+          <span>ĐIỆN ÁP CẢM BIẾN (GPIO 34)</span>
+        </div>
+        <span class="mode-pill-tag">VÒNG KHUYẾT NEON</span>
+      </div>
+
+      <div class="vivid-top-metrics">
+        <div class="vivid-main-value" id="voltGaugeNumText">0.00<small>V</small></div>
+        <div class="raw-chip" id="voltAdcChip">Thang đo 0 - 3.30V</div>
+      </div>
+
+      <div class="vivid-stage">
+        <svg viewBox="0 0 320 154">
+          <defs>
+            <linearGradient id="voltNeonGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#06b6d4" />
+              <stop offset="50%" stop-color="#10b981" />
+              <stop offset="100%" stop-color="#f59e0b" />
+            </linearGradient>
+            <filter id="voltGlow" x="-25%" y="-25%" width="150%" height="150%">
+              <feGaussianBlur stdDeviation="3.5" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          <!-- Vòng khuyết nền -->
+          <path d="M 78 134 A 86 86 0 1 1 242 134" fill="none" stroke="#1e293b" stroke-width="13" stroke-linecap="round" />
+
+          <!-- Vòng khuyết Neon phát sáng chạy theo Volt (Tổng chiều dài cung ~ 395) -->
+          <path d="M 78 134 A 86 86 0 1 1 242 134" fill="none" stroke="url(#voltNeonGrad)" stroke-width="13"
+            stroke-linecap="round" stroke-dasharray="395" stroke-dashoffset="395" filter="url(#voltGlow)"
+            id="voltNeonProgressArc" style="transition: stroke-dashoffset 0.65s cubic-bezier(0.4,0,0.2,1);" />
+
+          <!-- Nhãn chia vạch -->
+          <text x="56" y="142" font-size="9.5" fill="#06b6d4" font-weight="700">0.0V</text>
+          <text x="64" y="50" font-size="9.5" fill="#94a3b8">1.0V</text>
+          <text x="160" y="15" font-size="9.5" fill="#10b981" font-weight="700" text-anchor="middle">1.65V</text>
+          <text x="252" y="50" font-size="9.5" fill="#94a3b8">2.5V</text>
+          <text x="246" y="142" font-size="9.5" fill="#f59e0b" font-weight="700">3.3V</text>
+
+          <!-- Thông số trung tâm kiểu SpO2 Neon Ring -->
+          <text x="160" y="84" font-size="27" font-weight="800" fill="#f8fafc" text-anchor="middle" id="voltGaugeCenterNum">0.00V</text>
+          <text x="160" y="104" font-size="10" font-weight="700" fill="#38bdf8" letter-spacing="1.2" text-anchor="middle" id="voltLevelSubLabel">ANALOG AO</text>
+          <text x="160" y="124" font-size="10.5" fill="#94a3b8" text-anchor="middle" id="voltGaugeSubDesc">ADC: 0 / 4095</text>
+        </svg>
+      </div>
+
+      <div class="vivid-footer">
+        <div class="vivid-status-pill" id="voltGaugeBadge" style="color:#38bdf8;border-color:rgba(56,189,248,0.45);background:rgba(6,182,212,0.16)">
+          <span class="vivid-status-dot"></span>
+          <span id="voltStatusText"> Tín hiệu AO ổn định</span>
+        </div>
+        <span class="vivid-caption">Điện áp cảm biến độ ẩm gửi về</span>
+      </div>
+    </section>
+
+    <!-- THẺ 3: CẢM BIẾN PHAO (GPIO 33) - MÔ PHỎNG BỒN NƯỚC SÓNG ĐỘNG & PHAO NỔI -->
+    <section class="card vivid-sensor-card">
+      <div class="card-head">
+        <div class="card-title">
+          <span class="sensor-icon-box">🛟</span>
+          <span>CẢM BIẾN PHAO (GPIO 33)</span>
+        </div>
+        <span class="mode-pill-tag">BỒN NƯỚC &amp; PHAO NỔI</span>
+      </div>
+
+      <div class="vivid-top-metrics">
+        <div class="vivid-main-value" id="floatGaugeNumText" style="color:#38bdf8">ĐẦY NƯỚC</div>
+        <div class="raw-chip" id="floatPinChip">GPIO 33: LOW</div>
+      </div>
+
+      <div class="vivid-stage">
+        <svg viewBox="0 0 340 154">
+          <defs>
+            <clipPath id="waterTankClip">
+              <rect x="24" y="18" width="176" height="120" rx="12" />
+            </clipPath>
+            <linearGradient id="tankWaterGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.85" />
+              <stop offset="100%" stop-color="#0284c7" stop-opacity="0.95" />
+            </linearGradient>
+          </defs>
+
+          <!-- Nền trong bồn chứa -->
+          <rect x="24" y="18" width="176" height="120" rx="12" fill="#0a1222" />
+
+          <!-- Khối nước sóng sánh bên trong bồn -->
+          <g clip-path="url(#waterTankClip)">
+            <g id="tankWaterLevelGroup" class="smooth-level" style="transform: translateY(34px);">
+              <!-- Lớp sóng sau -->
+              <path d="M -120 8 Q -90 2 -60 8 T 0 8 T 60 8 T 120 8 T 180 8 T 240 8 T 300 8 T 360 8 L 360 150 L -120 150 Z"
+                fill="rgba(56, 189, 248, 0.35)" class="wave-anim-back" />
+              <!-- Lớp sóng chính -->
+              <path d="M -120 10 Q -90 4 -60 10 T 0 10 T 60 10 T 120 10 T 180 10 T 240 10 T 300 10 T 360 10 L 360 150 L -120 150 Z"
+                fill="url(#tankWaterGrad)" class="wave-anim-front" id="tankMainWavePath" />
+
+              <!-- Bọt khí nổi lên khi bồn có nước -->
+              <g id="tankBubblesGroup">
+                <circle cx="65" cy="95" r="3" fill="rgba(255,255,255,0.45)" class="tank-bubble-1" />
+                <circle cx="112" cy="105" r="4" fill="rgba(255,255,255,0.35)" class="tank-bubble-2" />
+                <circle cx="156" cy="98" r="2.5" fill="rgba(255,255,255,0.45)" class="tank-bubble-3" />
+              </g>
+            </g>
+
+            <!-- Trục dẫn hướng phao inox -->
+            <line x1="112" y1="18" x2="112" y2="138" stroke="#64748b" stroke-width="3" />
+            <rect x="104" y="18" width="16" height="7" rx="2" fill="#94a3b8" />
+
+            <!-- Quả phao nổi dập dềnh theo mực nước -->
+            <g id="tankBuoyPosGroup" class="smooth-level" style="transform: translateY(32px);">
+              <g class="buoy-bob-inner">
+                <rect x="92" y="0" width="40" height="22" rx="9" fill="#fbbf24" stroke="#fff" stroke-width="1.8" id="tankBuoyRect" />
+                <line x1="94" y1="11" x2="130" y2="11" stroke="#b45309" stroke-width="2" />
+              </g>
+            </g>
+          </g>
+
+          <!-- Thành bồn thủy tinh & Vạch thước đo -->
+          <rect x="24" y="18" width="176" height="120" rx="12" fill="none" stroke="#38bdf8" stroke-width="2" id="tankBorderRect" />
+          <g stroke="rgba(255,255,255,0.28)" stroke-width="1.2" font-size="8.5" fill="#94a3b8">
+            <line x1="24" y1="42" x2="34" y2="42" /><text x="38" y="45" stroke="none">100%</text>
+            <line x1="24" y1="78" x2="32" y2="78" /><text x="38" y="81" stroke="none">50%</text>
+            <line x1="24" y1="118" x2="34" y2="118" /><text x="38" y="121" stroke="none">CẠN</text>
+          </g>
+
+          <!-- Khung thông tin bên phải bồn -->
+          <text x="270" y="56" font-size="24" font-weight="800" fill="#38bdf8" text-anchor="middle" id="floatSidePct">100%</text>
+          <text x="270" y="79" font-size="11.5" font-weight="800" fill="#34d399" text-anchor="middle" id="floatSideInterlock">🔓 MỞ KHÓA BƠM</text>
+          <text x="270" y="100" font-size="10.5" fill="#94a3b8" text-anchor="middle" id="floatSideSub">Mực nước an toàn</text>
+          <text x="270" y="124" font-size="10" font-weight="700" fill="#64748b" text-anchor="middle">INPUT_PULLUP</text>
+        </svg>
+      </div>
+
+      <div class="vivid-footer">
+        <div class="vivid-status-pill" id="floatGaugeBadge" style="color:#38bdf8;border-color:rgba(56,189,248,0.45);background:rgba(6,182,212,0.16)">
+          <span class="vivid-status-dot"></span>
+          <span id="floatStatusFooterText">Bồn đầy nước (An toàn)</span>
+        </div>
+        <span class="vivid-caption">Mô phỏng Bồn nước &amp; Phao Live</span>
+      </div>
+    </section>
+
+    <!-- THẺ 4: CẢM BIẾN ÁNH SÁNG (GPIO 25) - VÒM KHÍ TƯỢNG NGÀY & ĐÊM (GIỐNG ẢNH MẪU) -->
+    <section class="card vivid-sensor-card">
+      <div class="card-head">
+        <div class="card-title">
+          <span class="sensor-icon-box">☀️</span>
+          <span>CẢM BIẾN ÁNH SÁNG (GPIO 25)</span>
+        </div>
+        <span class="mode-pill-tag">VÒM KHÍ TƯỢNG NGÀY - ĐÊM</span>
+      </div>
+
+      <div class="vivid-top-metrics">
+        <div class="vivid-main-value" id="lightGaugeNumText" style="color:#fcd34d">CÓ SÁNG</div>
+        <div class="raw-chip" id="lightPinChip">DO: LOW (Sáng)</div>
+      </div>
+
+      <div class="vivid-stage">
+        <svg viewBox="0 0 340 154">
+          <defs>
+            <linearGradient id="daySkyGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#0369a1" />
+              <stop offset="100%" stop-color="#0f294a" />
+            </linearGradient>
+            <linearGradient id="nightSkyGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#070b19" />
+              <stop offset="100%" stop-color="#1e1b4b" />
+            </linearGradient>
+            <radialGradient id="sunCoreGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fef08a" />
+              <stop offset="55%" stop-color="#facc15" />
+              <stop offset="100%" stop-color="rgba(250, 204, 21, 0)" />
+            </radialGradient>
+            <clipPath id="skyDomeClip">
+              <rect x="12" y="10" width="316" height="134" rx="12" />
+            </clipPath>
+          </defs>
+
+          <g clip-path="url(#skyDomeClip)">
+            <!-- Nền bầu trời Ban Ngày / Ban Đêm -->
+            <rect x="12" y="10" width="316" height="134" fill="url(#daySkyGrad)" id="skyBgRectDay" style="transition: opacity 0.7s ease;" />
+            <rect x="12" y="10" width="316" height="134" fill="url(#nightSkyGrad)" id="skyBgRectNight" opacity="0" style="transition: opacity 0.7s ease;" />
+
+            <!-- Bầu trời sao lấp lánh (Hiện vào Ban Đêm) -->
+            <g id="nightStarsGroup" opacity="0" style="transition: opacity 0.7s ease;">
+              <circle cx="48" cy="34" r="1.8" fill="#fff" class="star-twinkle-1" />
+              <circle cx="88" cy="24" r="1.4" fill="#e0e7ff" class="star-twinkle-2" />
+              <circle cx="130" cy="42" r="1.6" fill="#fff" class="star-twinkle-3" />
+              <circle cx="215" cy="26" r="1.9" fill="#fef08a" class="star-twinkle-1" />
+              <circle cx="264" cy="38" r="1.5" fill="#fff" class="star-twinkle-2" />
+              <circle cx="296" cy="25" r="1.7" fill="#c7d2fe" class="star-twinkle-3" />
+              <circle cx="65" cy="72" r="1.3" fill="#fff" class="star-twinkle-2" />
+              <circle cx="282" cy="70" r="1.4" fill="#fff" class="star-twinkle-1" />
+            </g>
+
+            <!-- Quỹ đạo vòm thiên văn nét đứt (Giống hệt ảnh mẫu!) -->
+            <path d="M 42 128 A 132 102 0 0 1 298 128" fill="none" stroke="rgba(148, 163, 184, 0.35)" stroke-width="1.6" stroke-dasharray="5,5" />
+
+            <!-- Cụm Mặt Trời Tỏa Nắng & Mây Trôi (Ban Ngày) -->
+            <g id="daySunGroup" style="transition: all 0.75s cubic-bezier(0.4,0,0.2,1); opacity: 1; transform: translateY(0px);">
+              <circle cx="170" cy="56" r="38" fill="url(#sunCoreGlow)" opacity="0.55" />
+              <!-- Tia nắng xoay tròn -->
+              <g class="sun-rays-spin" stroke="#fde047" stroke-width="2.2" stroke-linecap="round">
+                <line x1="170" y1="24" x2="170" y2="30" />
+                <line x1="170" y1="82" x2="170" y2="88" />
+                <line x1="138" y1="56" x2="144" y2="56" />
+                <line x1="196" y1="56" x2="202" y2="56" />
+                <line x1="147" y1="33" x2="152" y2="38" />
+                <line x1="188" y1="74" x2="193" y2="79" />
+                <line x1="193" y1="33" x2="188" y2="38" />
+                <line x1="152" y1="74" x2="147" y2="79" />
+              </g>
+              <circle cx="170" cy="56" r="19" fill="#facc15" stroke="#fef08a" stroke-width="2" />
+
+              <!-- Mây trắng bồng bềnh -->
+              <g class="cloud-anim-1" fill="rgba(255,255,255,0.24)">
+                <rect x="64" y="64" width="46" height="14" rx="7" />
+                <circle cx="78" cy="63" r="9" />
+                <circle cx="94" cy="61" r="11" />
+              </g>
+              <g class="cloud-anim-2" fill="rgba(255,255,255,0.2)">
+                <rect x="226" y="52" width="42" height="13" rx="6.5" />
+                <circle cx="240" cy="51" r="8" />
+                <circle cx="254" cy="50" r="9.5" />
+              </g>
+            </g>
+
+            <!-- Cụm Mặt Trăng Khuyết Tỏa Sáng (Ban Đêm) -->
+            <g id="nightMoonGroup" style="transition: all 0.75s cubic-bezier(0.4,0,0.2,1); opacity: 0; transform: translateY(45px);">
+              <circle cx="170" cy="56" r="32" fill="rgba(129, 140, 248, 0.22)" />
+              <path d="M 178 36 A 21 21 0 1 0 190 70 A 16 16 0 1 1 178 36 Z" fill="#fef08a" stroke="#fde68a" stroke-width="1.2" />
+            </g>
+
+            <!-- Đường chân trời -->
+            <line x1="22" y1="128" x2="318" y2="128" stroke="rgba(148, 163, 184, 0.3)" stroke-width="1.5" />
+            <circle cx="42" cy="128" r="3.5" fill="#fbbf24" id="horizonLeftDot" />
+            <circle cx="298" cy="128" r="3.5" fill="#64748b" id="horizonRightDot" />
+          </g>
+
+          <rect x="12" y="10" width="316" height="134" rx="12" fill="none" stroke="rgba(56, 189, 248, 0.25)" stroke-width="1.5" id="skyDomeBorder" />
+        </svg>
+      </div>
+
+      <div class="vivid-footer">
+        <div class="vivid-status-pill" id="lightGaugeBadge" style="color:#fcd34d;border-color:rgba(252,211,77,0.45);background:rgba(252,211,77,0.14)">
+          <span class="vivid-status-dot"></span>
+          <span id="lightStatusFooterText">Trời sáng (Ngắt tưới AUTO)</span>
+        </div>
+        <span class="vivid-caption">Mô phỏng Ngày &amp; Đêm Live</span>
+      </div>
+    </section>
+
+    <!-- ==================== HÀNG 2: THẺ VÙNG TƯỚI & ĐIỀU KHIỂN + RESET EEPROM ==================== -->
+
+    <!-- KHỐI TRẠNG THÁI VÙNG TƯỚI -->
+    <section class="card zone-card">
+      <div class="card-head">
+        <div class="card-title">VÙNG 1 (CẢM BIẾN V1.2 - AUTO TƯỚI BAN ĐÊM KHI &lt; 40%, NGẮT KHI &gt; 70%)</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div class="light-pill" id="zoneLightPill" style="font-size:12px;font-weight:700;color:#fcd34d;background:rgba(252,211,77,0.15);border:1px solid #fcd34d;padding:3px 10px;border-radius:8px;">☀️ CÓ SÁNG</div>
+          <div class="voltage-pill" id="zoneVoltage">0.00 V</div>
+        </div>
+      </div>
+      <div class="zone-big-num" id="zoneBigNum">00 <span style="font-size:24px;color:var(--text-sub)">%</span></div>
+      <div>
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" id="zoneProgress"></div>
+        </div>
+        <div class="zone-status-text" id="zoneStatusText">Trạng thái: ĐANG ĐỌC CẢM BIẾN...</div>
+      </div>
+    </section>
+
+    <!-- KHỐI ĐIỀU KHIỂN TỪ XA & NÚT RESET EEPROM VỀ CHẾ ĐỘ CẤU HÌNH -->
+    <section class="card control-card">
+      <div>
+        <div class="card-head" style="margin-bottom:6px">
+          <div class="card-title">🎮 ĐIỀU KHIỂN TỪ XA &amp; QUẢN LÝ CẤU HÌNH EEPROM</div>
+        </div>
+
+        <div class="danger-alert-banner" id="waterEmptyBanner">
+          ⚠️ [KHÓA AN TOÀN] Bồn đang cạn nước! Lệnh bật bơm bị khóa cứng để chống cháy động cơ.
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="ctrl-btn btn-mode" id="btnToggleMode" onclick="sendMqttCommand('toggle_mode')">
+          <span style="font-size:19px">🔄</span>
+          <span id="btnModeLabel">CHẾ ĐỘ: AUTO</span>
+        </button>
+
+        <button class="ctrl-btn btn-pump" id="btnTogglePump" onclick="sendMqttCommand('toggle_pump')">
+          <span style="font-size:19px">💧</span>
+          <span id="btnPumpLabel">BƠM: ĐANG TẮT</span>
+        </button>
+      </div>
+
+      <!-- Tính năng chấm điểm Trang Web Cấu Hình: Nút Reset xóa EEPROM chuyển về Config Mode -->
+      <div class="eeprom-config-box">
+        <div class="eeprom-config-title">
+          <span>⚙️ CẤU HÌNH WIFI / EEPROM ESP32</span>
+          <span id="espIpBadge" style="color:var(--cyan);font-family:monospace">IP: Đang dò...</span>
+        </div>
+        <div class="eeprom-btn-row">
+          <a class="btn-open-config" id="btnOpenEspConfig" href="http://192.168.4.1" target="_blank" title="Mở trang Web cấu hình trực tiếp trên ESP32">
+            <span>🌐</span>
+            <span>Trang Cấu Hình</span>
+          </a>
+          <button class="btn-reset-eeprom" onclick="openResetEepromModal()" title="Xóa cấu hình Wi-Fi trong EEPROM và chuyển ESP32 sang chế độ phát AP cấu hình">
+            <span>🗑️</span>
+            <span>RESET CẤU HÌNH (EEPROM)</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== HÀNG 3: 4 ĐỒ THỊ THỜI GIAN THỰC (MỖI ĐỒ THỊ MỘT KIỂU KHÁC NHAU) ==================== -->
+
+    <!-- ĐỒ THỊ 1: ĐỘ ẨM ĐẤT - GIỮ NGUYÊN ĐƯỜNG CONG MIỀN XANH LÁ MƯỢT -->
+    <section class="card chart-card">
+      <div class="card-head">
+        <div class="card-title">📈 ĐỒ THỊ ĐỘ ẨM ĐẤT THỜI GIAN THỰC (% RH)</div>
+        <span style="font-size:11.5px;color:#10b981;font-weight:700">Ngưỡng: 40% - 70%</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="realtimeChartCanvas"></canvas>
+      </div>
+    </section>
+
+    <!-- ĐỒ THỊ 2: ĐIỆN ÁP CẢM BIẾN - GIAO DIỆN TÍM CYBER & BIỂU ĐỒ CỘT PHỔ ĐỨNG (BAR SPECTRUM) -->
+    <section class="card chart-card chart-style-violet">
+      <div class="card-head">
+        <div class="card-title">⚡ BIỂU ĐỒ CỘT PHỔ ĐIỆN ÁP CẢM BIẾN (VOLT)</div>
+        <span style="font-size:11px;color:#c084fc;font-weight:700;background:rgba(168,85,247,0.16);padding:3px 8px;border-radius:6px;border:1px solid rgba(168,85,247,0.35)">COLUMN SPECTRUM</span>
+      </div>
+      <div class="volt-kpi-strip">
+        <div class="volt-kpi-box"><span>Thấp nhất:</span><b id="voltMinStat">0.00V</b></div>
+        <div class="volt-kpi-box"><span>Trung bình:</span><b id="voltAvgStat">0.00V</b></div>
+        <div class="volt-kpi-box"><span>Cao nhất:</span><b id="voltMaxStat">0.00V</b></div>
+      </div>
+      <div class="chart-container" style="height:162px">
+        <canvas id="voltageChartCanvas"></canvas>
+      </div>
+    </section>
+
+    <!-- ĐỒ THỊ 3: PHAO CHỐNG CẠN - GIAO DIỆN KÉP: VÒNG TRÒN TỶ LỆ DOUGHNUT + MÀN HÌNH XUNG LOGIC -->
+    <section class="card chart-card chart-style-ocean">
+      <div class="card-head">
+        <div class="card-title">🛟 PHÂN TÍCH PHAO NƯỚC (TỶ LỆ &amp; DAO ĐỘNG XUNG)</div>
+        <span style="font-size:11px;color:#38bdf8;font-weight:700;background:rgba(14,165,233,0.16);padding:3px 8px;border-radius:6px;border:1px solid rgba(56,189,248,0.35)">DOUGHNUT + LOGIC</span>
+      </div>
+      <div class="float-dual-layout">
+        <div class="float-doughnut-box">
+          <div class="float-doughnut-canvas-wrap">
+            <canvas id="floatDoughnutCanvas"></canvas>
+            <div class="float-doughnut-center">
+              <span id="floatSafePctLabel">100%</span>
+              <small>AN TOÀN</small>
+            </div>
+          </div>
+          <div class="float-doughnut-legend" id="floatDoughnutSub">Đầy: 0 | Cạn: 0</div>
+        </div>
+        <div class="float-scope-box">
+          <canvas id="floatChartCanvas"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ĐỒ THỊ 4: ÁNH SÁNG LDR - GIAO DIỆN KHÍ TƯỢNG & BIỂU ĐỒ KẸO MÚT QUANG HỌC (SOLAR LOLLIPOP) -->
+    <section class="card chart-card chart-style-solar">
+      <div class="card-head">
+        <div class="card-title">☀️ BIỂU ĐỒ HẠT QUANG HỌC ÁNH SÁNG LDR</div>
+        <span style="font-size:11px;color:#fbbf24;font-weight:700;background:rgba(245,158,11,0.16);padding:3px 8px;border-radius:6px;border:1px solid rgba(245,158,11,0.35)">LOLLIPOP MATRIX</span>
+      </div>
+      <div class="solar-stats-bar">
+        <span style="color:#f59e0b" id="solarDayCountLabel">☀️ Sáng: 0 mẫu</span>
+        <div class="solar-ratio-track">
+          <div class="solar-ratio-fill" id="solarRatioBarFill"></div>
+        </div>
+        <span style="color:#818cf8" id="solarNightCountLabel">🌙 Đêm: 0 mẫu</span>
+      </div>
+      <div class="chart-container" style="height:162px">
+        <canvas id="lightChartCanvas"></canvas>
+      </div>
+    </section>
+
+    <!-- ==================== HÀNG 4: SƠ ĐỒ NỐI DÂY CHI TIẾT PHẦN CỨNG ==================== -->
+    <section class="card schematic-card">
+      <div class="card-head">
+        <div class="card-title">🔌 SƠ ĐỒ NỐI DÂY CHI TIẾT PHẦN CỨNG (ĐỒNG BỘ THỜI GIAN THỰC)</div>
+        <span style="font-size:12px;color:var(--text-sub)">ESP32 WROOM 38-Pin Pinout Mapping</span>
+      </div>
+      <div class="schematic-container">
+        <svg viewBox="0 0 980 340">
+          <defs>
+            <linearGradient id="mcuGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#1e293b" />
+              <stop offset="100%" stop-color="#0f172a" />
+            </linearGradient>
+            <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+
+          <path d="M 150 60 L 330 60 L 330 110 L 400 110" stroke="#10b981" stroke-width="2.5" fill="none" stroke-dasharray="4,2" />
+          <path d="M 150 150 L 400 150" stroke="#fcd34d" stroke-width="2.5" fill="none" />
+          <path d="M 150 240 L 330 240 L 330 190 L 400 190" stroke="#ef4444" stroke-width="2.5" fill="none" />
+          <path d="M 580 140 L 640 140 L 640 90 L 700 90" stroke="#f59e0b" stroke-width="2.5" fill="none" />
+          <path d="M 830 90 L 880 90" stroke="#38bdf8" stroke-width="3" fill="none" />
+          <path d="M 580 180 L 640 180 L 640 230 L 700 230" stroke="#ef4444" stroke-width="2.5" fill="none" />
+          <path d="M 440 270 L 440 310" stroke="#94a3b8" stroke-width="2" fill="none" />
+          <path d="M 540 270 L 540 310" stroke="#94a3b8" stroke-width="2" fill="none" />
+          <path d="M 490 70 L 490 25 L 700 25" stroke="#a855f7" stroke-width="2" fill="none" />
+
+          <g transform="translate(20, 25)">
+            <rect width="130" height="70" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="2" />
+            <text x="65" y="20" font-size="10.5" font-weight="700" fill="#10b981" text-anchor="middle">SOIL MOISTURE v1.2</text>
+            <text x="65" y="38" font-size="9.5" fill="#94a3b8" text-anchor="middle">AO ➜ GPIO 34 (ADC1)</text>
+            <text x="65" y="58" font-size="13" font-weight="800" fill="#fff" text-anchor="middle" id="svgSoilReadout">-- % RH</text>
+          </g>
+
+          <g transform="translate(20, 115)" id="svgLightGroup">
+            <rect width="130" height="70" rx="8" fill="#1e293b" stroke="#fcd34d" stroke-width="2" id="svgLightRect" />
+            <text x="65" y="20" font-size="10.5" font-weight="700" fill="#fcd34d" text-anchor="middle">QUANG TRỞ LDR</text>
+            <text x="65" y="38" font-size="9.5" fill="#94a3b8" text-anchor="middle">DO ➜ GPIO 25</text>
+            <text x="65" y="58" font-size="12" font-weight="800" fill="#fcd34d" text-anchor="middle" id="svgLightReadout">☀️ CÓ SÁNG</text>
+          </g>
+
+          <g transform="translate(20, 205)" id="svgFloatSwitchGroup">
+            <rect width="130" height="70" rx="8" fill="#1e293b" stroke="#ef4444" stroke-width="2" id="svgFloatRect" />
+            <text x="65" y="20" font-size="10.5" font-weight="700" fill="#ef4444" text-anchor="middle">PHAO CHỐNG CẠN</text>
+            <text x="65" y="38" font-size="9.5" fill="#94a3b8" text-anchor="middle">GPIO 33 (PULLUP)</text>
+            <text x="65" y="58" font-size="12" font-weight="800" fill="#ef4444" text-anchor="middle" id="svgFloatReadout">CẠN NƯỚC</text>
+          </g>
+
+          <g transform="translate(400, 70)">
+            <rect width="180" height="200" rx="10" fill="url(#mcuGrad)" stroke="#475569" stroke-width="2" />
+            <rect x="30" y="15" width="120" height="50" rx="4" fill="#334155" stroke="#64748b" />
+            <text x="90" y="45" font-size="13" font-weight="800" fill="#f8fafc" text-anchor="middle">ESP-WROOM-32</text>
+            <text x="90" y="90" font-size="11" font-weight="700" fill="#38bdf8" text-anchor="middle">BOARD 38-PIN</text>
+            <circle cx="20" cy="180" r="4" fill="#ef4444" />
+            <text x="32" y="184" font-size="10" fill="#94a3b8">PWR</text>
+            <circle cx="160" cy="180" r="4" fill="#10b981" />
+            <text x="145" y="184" font-size="10" fill="#94a3b8" text-anchor="end">WIFI</text>
+          </g>
+
+          <g transform="translate(700, 50)">
+            <rect width="130" height="80" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="2" />
+            <text x="65" y="24" font-size="11" font-weight="700" fill="#f59e0b" text-anchor="middle">MODULE RELAY 1</text>
+            <text x="65" y="44" font-size="10" fill="#94a3b8" text-anchor="middle">IN ➜ GPIO 26</text>
+            <text x="65" y="66" font-size="13" font-weight="800" fill="#fcd34d" text-anchor="middle" id="svgRelayReadout">RELAY: TẮT</text>
+          </g>
+          <g transform="translate(880, 55)" id="svgPumpGroup">
+            <circle cx="35" cy="35" r="32" fill="#1e293b" stroke="#475569" stroke-width="3" id="svgPumpCircle" />
+            <text x="35" y="32" font-size="10" font-weight="700" fill="#94a3b8" text-anchor="middle">BƠM 1</text>
+            <text x="35" y="48" font-size="9" font-weight="700" fill="#64748b" text-anchor="middle" id="svgPumpStateText">TẮT</text>
+          </g>
+
+          <g transform="translate(700, 190)">
+            <rect width="130" height="80" rx="8" fill="#1e293b" stroke="#ef4444" stroke-width="2" />
+            <text x="65" y="24" font-size="11" font-weight="700" fill="#ef4444" text-anchor="middle">LED ALARM</text>
+            <text x="65" y="44" font-size="10" fill="#94a3b8" text-anchor="middle">Chân ➜ GPIO 4</text>
+            <circle cx="65" cy="62" r="10" fill="#475569" id="svgAlarmLedDot" />
+          </g>
+
+          <g transform="translate(700, 2)">
+            <rect width="250" height="42" rx="4" fill="#064e3b" stroke="#10b981" stroke-width="1.5" />
+            <text x="8" y="16" font-family="Courier, monospace" font-size="11" fill="#6ee7b7" id="svgLcdL1">Am dat: --% [A]</text>
+            <text x="8" y="34" font-family="Courier, monospace" font-size="11" fill="#6ee7b7" id="svgLcdL2">BOM: TAT</text>
+          </g>
+
+          <g transform="translate(380, 290)">
+            <rect width="100" height="35" rx="6" fill="#334155" stroke="#64748b" />
+            <text x="50" y="22" font-size="10" font-weight="700" fill="#f8fafc" text-anchor="middle">NÚT 1 (GPIO 14)</text>
+          </g>
+          <g transform="translate(500, 290)">
+            <rect width="100" height="35" rx="6" fill="#334155" stroke="#64748b" />
+            <text x="50" y="22" font-size="10" font-weight="700" fill="#f8fafc" text-anchor="middle">NÚT 2 (GPIO 12)</text>
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <!-- ==================== HÀNG 5A: CƠ SỞ DỮ LIỆU MYSQL (iot_db -> LOG) & NÚT XÓA DỮ LIỆU ==================== -->
+    <section class="card mysql-card">
+      <div class="card-head" style="flex-wrap:wrap;gap:10px">
+        <div class="card-title">
+          <span class="sensor-icon-box">🐬</span>
+          <span>CƠ SỞ DỮ LIỆU MYSQL (DATABASE: iot_db ➔ BẢNG: LOG)</span>
+          <span class="badge" id="mysqlStatusBadge" style="font-size:11px;padding:3px 10px;text-transform:none">
+            ⏳ Đang kiểm tra MySQL...
+          </span>
+        </div>
+        <div class="mysql-toolbar">
+          <button class="btn-mysql-action btn-mysql-push" id="btnMysqlPushNow" onclick="pushCurrentToMysql()">
+            📤 Gửi dữ liệu vào MySQL
+          </button>
+          <button class="btn-mysql-action btn-mysql-reload" onclick="loadMysqlHistory()">
+            🔄 Tải lại MySQL
+          </button>
+          <button class="btn-mysql-action btn-mysql-clear" onclick="openClearMysqlModal()">
+            🗑️ Xóa dữ liệu MySQL
+          </button>
+        </div>
+      </div>
+      <div class="history-table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Thiết bị</th>
+              <th>Độ ẩm đất</th>
+              <th>RAW ADC</th>
+              <th>Điện áp (V)</th>
+              <th>Ánh sáng</th>
+              <th>Mực nước</th>
+              <th>Máy Bơm</th>
+              <th>Chế độ</th>
+              <th>Thời gian lưu MySQL</th>
+              <th>Xóa</th>
+            </tr>
+          </thead>
+          <tbody id="mysqlTableBody">
+            <tr>
+              <td colspan="11" style="text-align:center;color:var(--text-sub)">Đang tải dữ liệu từ MySQL (iot_db.LOG)...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ==================== HÀNG 5B: BẢNG LỊCH SỬ DATABASE SQLITE ==================== -->
+    <section class="card history-card">
+      <div class="card-head">
+        <div class="card-title">🗄️ NHẬT KÝ LƯU TRỮ CƠ SỞ DỮ LIỆU (SQLITE: dulieu_iot.db)</div>
+        <button class="badge" onclick="loadDbHistory()" style="cursor:pointer;background:#334155;color:#fff">
+          🔄 Tải lại lịch sử
+        </button>
+      </div>
+      <div class="history-table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Thiết bị</th>
+              <th>Độ ẩm đất</th>
+              <th>RAW ADC</th>
+              <th>Điện áp (V)</th>
+              <th>Ánh sáng</th>
+              <th>Mực nước</th>
+              <th>Máy Bơm</th>
+              <th>Chế độ</th>
+              <th>Thời gian ghi</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody">
+            <tr>
+              <td colspan="10" style="text-align:center;color:var(--text-sub)">Đang kết nối cơ sở dữ liệu...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal 1: Quét Mã QR Cho Điện Thoại -->
+  <div id="qrModal" class="modal-overlay" onclick="closeQrModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>📱 QUÉT QR MỞ TRÊN ĐIỆN THOẠI</h3>
+        <button class="modal-close-btn" onclick="closeQrModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-sub);font-size:12.5px;margin-bottom:12px;line-height:1.4">
+          Dùng camera điện thoại hoặc Zalo quét mã QR này để mở Web Dashboard tức thì mà không cần gõ địa chỉ IP:
+        </p>
+        <div class="qr-image-wrapper">
+          <img id="qrImage" src="/api/qr" alt="Mã QR kết nối điện thoại" />
+        </div>
+        <div class="qr-url-box">
+          <span id="qrLanUrl">Đang tải địa chỉ...</span>
+          <button class="copy-btn" onclick="copyLanUrl()">Sao chép</button>
+        </div>
+        <div class="qr-note">
+          💡 <b>Tự động cập nhật:</b> Khi đổi sang Wi-Fi khác hoặc phát 4G, mã QR và IP sẽ tự động đổi theo mạng mới!
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Xác nhận Reset Xóa EEPROM & Chuyển ESP32 về Chế độ Cấu hình -->
+  <div id="resetEepromModal" class="modal-overlay" onclick="closeResetEepromModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 style="color:#fca5a5">🗑️ RESET XÓA CẤU HÌNH EEPROM</h3>
+        <button class="modal-close-btn" onclick="closeResetEepromModal()">&times;</button>
+      </div>
+      <div id="resetModalBody">
+        <p style="color:#e2e8f0;font-size:13.5px;margin-bottom:12px;line-height:1.55;text-align:left">
+          Khi nhấn xác nhận, trang Web sẽ gửi lệnh xuống <b>ESP32</b> để thực hiện:
+        </p>
+        <div class="qr-note" style="margin-bottom:14px;border:1px solid rgba(239,68,68,0.35)">
+          1️⃣ <b>Xóa sạch dữ liệu cấu hình</b> (Wi-Fi &amp; MQTT) đang lưu trong bộ nhớ <b>EEPROM</b>.<br>
+          2️⃣ <b>ESP32 tự động chuyển sang Chế độ Cấu hình</b> (Access Point Mode).<br>
+          3️⃣ Phát Wi-Fi: <b style="color:#38bdf8">ESP32_TuoiCay_IoT</b> (Mật khẩu: <code>12345678</code>) — Trang cấu hình tại: <b style="color:#fcd34d">http://192.168.4.1</b>
+        </div>
+        <div class="modal-action-btns">
+          <button class="btn-cancel" onclick="closeResetEepromModal()">Hủy bỏ</button>
+          <button class="btn-confirm-danger" onclick="confirmResetEeprom()">🗑️ Xóa EEPROM Ngay</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Xác nhận Xóa Toàn Bộ Dữ Liệu MySQL (iot_db.LOG) -->
+  <div id="clearMysqlModal" class="modal-overlay" onclick="closeClearMysqlModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 style="color:#f87171">🗑️ XÁC NHẬN XÓA DỮ LIỆU MYSQL</h3>
+        <button class="modal-close-btn" onclick="closeClearMysqlModal()">&times;</button>
+      </div>
+      <div>
+        <p style="color:var(--text-sub);font-size:13.5px;margin-bottom:12px;line-height:1.5;text-align:left">
+          Bạn có chắc chắn muốn xóa toàn bộ bản ghi lịch sử cảm biến đang lưu trong <b>MySQL Database</b> không?
+        </p>
+        <div class="qr-note" style="margin-bottom:14px;border:1px solid rgba(239,68,68,0.4)">
+          🐬 <b>Cơ sở dữ liệu:</b> <code>iot_db</code> ➔ Bảng: <code>LOG</code><br>
+          ⚡ <b>Thao tác:</b> Thực thi lệnh <code>TRUNCATE TABLE LOG</code> xóa sạch toàn bộ dữ liệu cũ và đặt lại bộ đếm <code>ID = 1</code>.
+        </div>
+        <div class="modal-action-btns">
+          <button class="btn-cancel" onclick="closeClearMysqlModal()">Hủy bỏ</button>
+          <button class="btn-confirm-danger" onclick="confirmClearMysql()">🗑️ Xóa Sạch MySQL Ngay</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Chuyển đổi chế độ hiển thị thẻ Độ ẩm đất (Mặt cắt tầng đất <-> Kim bán nguyệt)
+    function switchSoilView(mode) {
+      const crossSvg = document.getElementById("soilCrossSvg");
+      const dialSvg = document.getElementById("soilDialSvg");
+      const btnCross = document.getElementById("btnSoilCrossView");
+      const btnDial = document.getElementById("btnSoilDialView");
+      if (mode === "dial") {
+        crossSvg.style.display = "none";
+        dialSvg.style.display = "block";
+        btnCross.classList.remove("active");
+        btnDial.classList.add("active");
+      } else {
+        crossSvg.style.display = "block";
+        dialSvg.style.display = "none";
+        btnCross.classList.add("active");
+        btnDial.classList.remove("active");
+      }
+    }
+
+    // Cấu hình MQTT WebSocket
+    let currentHost = window.location.hostname || "127.0.0.1";
+    if (currentHost === "localhost") currentHost = "127.0.0.1";
+    const wsUrl = `ws://${currentHost}:9001`;
+    document.getElementById("brokerHostLabel").innerText = wsUrl;
+
+    let mqttClient = null;
+    let lastChartPushTime = 0;
+    let latestData = {
+      moisture: 0,
+      raw: 0,
+      voltage: 0,
+      water_empty: false,
+      pump: false,
+      light: true,
+      mode: "AUTO",
+      alert: "NORMAL",
+      ip: ""
+    };
+
+    // ==================== KHỞI TẠO 4 ĐỒ THỊ THỜI GIAN THỰC (CHART.JS) ====================
+    const maxPoints = 30;
+    const chartLabels = [];
+    const moistureHistory = [];
+    const voltageHistory = [];
+    const floatHistory = [];
+    const lightHistory = [];
+
+    for (let i = maxPoints - 1; i >= 0; i--) {
+      chartLabels.push(`-${i}s`);
+      moistureHistory.push(null);
+      voltageHistory.push(null);
+      floatHistory.push(null);
+      lightHistory.push(null);
+    }
+
+    const commonXScale = {
+      grid: { color: "rgba(255,255,255,0.05)" },
+      ticks: { color: "#94a3b8", maxTicksLimit: 8, font: { size: 11 } }
+    };
+
+    const ctxMoisture = document.getElementById("realtimeChartCanvas").getContext("2d");
+    const gradMoisture = ctxMoisture.createLinearGradient(0, 0, 0, 190);
+    gradMoisture.addColorStop(0, "rgba(16, 185, 129, 0.4)");
+    gradMoisture.addColorStop(1, "rgba(16, 185, 129, 0.0)");
+
+    const realtimeChart = new Chart(ctxMoisture, {
+      type: "line",
+      data: {
+        labels: chartLabels,
+        datasets: [{
+          label: "Độ ẩm đất (% RH)",
+          data: moistureHistory,
+          borderColor: "#10b981",
+          backgroundColor: gradMoisture,
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 2,
+          pointBackgroundColor: "#10b981"
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        scales: {
+          x: commonXScale,
+          y: {
+            min: 0,
+            max: 100,
+            grid: { color: "rgba(255,255,255,0.08)" },
+            ticks: { color: "#94a3b8", stepSize: 20, callback: (v) => v + "%" }
+          }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    // Đồ thị 2: BIỂU ĐỒ CỘT PHỔ ĐỨNG ĐIỆN ÁP (Bar Spectrum - Tông Tím Cyber & Hồng Neon)
+    const ctxVoltage = document.getElementById("voltageChartCanvas").getContext("2d");
+    const voltageChart = new Chart(ctxVoltage, {
+      type: "bar",
+      data: {
+        labels: chartLabels,
+        datasets: [{
+          label: "Điện áp AO (Volt)",
+          data: voltageHistory,
+          backgroundColor: (ctx) => {
+            const v = ctx.raw;
+            if (v === null || v === undefined) return "rgba(168, 85, 247, 0.35)";
+            if (v <= 1.15) return "rgba(6, 182, 212, 0.85)";   // Ướt: Xanh Cyan
+            if (v <= 1.75) return "rgba(168, 85, 247, 0.85)";  // Chuẩn: Tím Neon
+            return "rgba(236, 72, 153, 0.88)";                 // Khô: Hồng Đỏ
+          },
+          borderColor: (ctx) => {
+            const v = ctx.raw;
+            if (v === null || v === undefined) return "#a855f7";
+            if (v <= 1.15) return "#22d3ee";
+            if (v <= 1.75) return "#c084fc";
+            return "#f472b6";
+          },
+          borderWidth: 1.5,
+          borderRadius: 6,
+          barPercentage: 0.72,
+          categoryPercentage: 0.84
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 250 },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: "#94a3b8", maxTicksLimit: 8, font: { size: 10.5 } }
+          },
+          y: {
+            min: 0,
+            max: 3.3,
+            grid: { color: "rgba(168, 85, 247, 0.14)" },
+            ticks: { color: "#94a3b8", stepSize: 1.1, callback: (v) => Number(v).toFixed(1) + "V" }
+          }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    // Đồ thị 3A: Vòng tròn tỷ lệ Đầy / Cạn (Doughnut Chart)
+    const ctxFloatDoughnut = document.getElementById("floatDoughnutCanvas").getContext("2d");
+    const floatDoughnutChart = new Chart(ctxFloatDoughnut, {
+      type: "doughnut",
+      data: {
+        labels: ["Đầy nước (An toàn)", "Cạn nước (Khóa bơm)"],
+        datasets: [{
+          data: [1, 0],
+          backgroundColor: ["#0ea5e9", "#ef4444"],
+          borderColor: ["rgba(14,165,233,0.4)", "rgba(239,68,68,0.4)"],
+          borderWidth: 2,
+          hoverOffset: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "70%",
+        animation: { duration: 300 },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    // Đồ thị 3B: Màn hình Dao động ký Xung Logic Phao Nước (Digital Logic Analyzer)
+    const ctxFloat = document.getElementById("floatChartCanvas").getContext("2d");
+    const gradFloat = ctxFloat.createLinearGradient(0, 0, 0, 175);
+    gradFloat.addColorStop(0, "rgba(14, 165, 233, 0.42)");
+    gradFloat.addColorStop(1, "rgba(14, 165, 233, 0.03)");
+
+    const floatChart = new Chart(ctxFloat, {
+      type: "line",
+      data: {
+        labels: chartLabels,
+        datasets: [{
+          label: "Xung Logic Phao",
+          data: floatHistory,
+          borderColor: "#0ea5e9",
+          backgroundColor: gradFloat,
+          fill: true,
+          stepped: "before",
+          borderWidth: 2.5,
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 200 },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: "#94a3b8", maxTicksLimit: 6, font: { size: 10 } }
+          },
+          y: {
+            min: -10,
+            max: 112,
+            grid: { display: false },
+            ticks: {
+              color: "#38bdf8",
+              stepSize: 50,
+              font: { size: 10, weight: "bold" },
+              callback: (v) => v === 0 ? "LOW (CẠN)" : (v === 100 ? "HIGH (ĐẦY)" : "")
+            }
+          }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    // Đồ thị 4: BIỂU ĐỒ KẸO MÚT QUANG HỌC ÁNH SÁNG (Mixed Lollipop Stem + Glowing Sun/Moon Heads)
+    const ctxLight = document.getElementById("lightChartCanvas").getContext("2d");
+    const lightChart = new Chart(ctxLight, {
+      data: {
+        labels: chartLabels,
+        datasets: [
+          {
+            type: "bar",
+            label: "Trụ năng lượng quang học",
+            data: lightHistory,
+            barThickness: 4,
+            borderRadius: 4,
+            backgroundColor: (ctx) => {
+              const v = ctx.raw;
+              if (v === null || v === undefined) return "rgba(148,163,184,0.2)";
+              return v >= 50 ? "rgba(245, 158, 11, 0.78)" : "rgba(99, 102, 241, 0.75)";
+            }
+          },
+          {
+            type: "line",
+            label: "Hạt quang học Ngày/Đêm",
+            data: lightHistory,
+            showLine: false,
+            pointRadius: (ctx) => ctx.raw === null ? 0 : (ctx.raw >= 50 ? 6.5 : 5.5),
+            pointStyle: (ctx) => (ctx.raw !== null && ctx.raw < 50) ? "rectRot" : "circle",
+            pointBackgroundColor: (ctx) => (ctx.raw !== null && ctx.raw >= 50) ? "#fde047" : "#818cf8",
+            pointBorderColor: (ctx) => (ctx.raw !== null && ctx.raw >= 50) ? "#f59e0b" : "#4f46e5",
+            pointBorderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 250 },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: "#94a3b8", maxTicksLimit: 8, font: { size: 10.5 } }
+          },
+          y: {
+            min: 0,
+            max: 112,
+            grid: { color: "rgba(245, 158, 11, 0.14)" },
+            ticks: {
+              color: "#94a3b8",
+              stepSize: 45,
+              callback: (v) => v <= 20 ? "🌙 ĐÊM" : (v >= 85 ? "☀️ SÁNG" : "")
+            }
+          }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    // ==================== KẾT NỐI MQTT WEBSOCKET & CẦU NỐI DỰ PHÒNG WOKWI ====================
+    let wokwiBrowserBridge = null;
+    const WOKWI_WS_TOPIC_DATA    = "tuoicay_tuong_2026/esp32/soil_moisture/data";
+    const WOKWI_WS_TOPIC_STATUS  = "tuoicay_tuong_2026/esp32/status";
+    const WOKWI_WS_TOPIC_CONTROL = "tuoicay_tuong_2026/esp32/soil_moisture/control";
+
+    function initWokwiBrowserFallback() {
+      // Nếu broker.js mới đã tích hợp sẵn Wokwi Bridge (200 OK) thì không cần mở thêm cầu nối trình duyệt
+      fetch("/api/wokwi-files")
+        .then(r => {
+          if (r.ok) return;
+          startWokwiBrowserBridge();
+        })
+        .catch(() => startWokwiBrowserBridge());
+    }
+
+    function startWokwiBrowserBridge() {
+      if (wokwiBrowserBridge) return;
+      try {
+        wokwiBrowserBridge = mqtt.connect("wss://broker.emqx.io:8084/mqtt", {
+          clientId: "WebDash_WokwiFallback_" + Math.random().toString(16).slice(2, 8),
+          clean: true,
+          reconnectPeriod: 5000
+        });
+        wokwiBrowserBridge.on("connect", () => {
+          wokwiBrowserBridge.subscribe([WOKWI_WS_TOPIC_DATA, WOKWI_WS_TOPIC_STATUS], () => {});
+        });
+        wokwiBrowserBridge.on("message", (topic, message) => {
+          const msgStr = message.toString();
+          if (topic === WOKWI_WS_TOPIC_DATA) {
+            if (mqttClient && mqttClient.connected) {
+              // Đẩy vào Local Broker để lưu SQLite và cập nhật Dashboard thống nhất
+              mqttClient.publish("esp32/soil_moisture/data", msgStr);
+            } else {
+              try { handleIncomingData(JSON.parse(msgStr)); } catch (e) {}
+            }
+          } else if (topic === WOKWI_WS_TOPIC_STATUS) {
+            try {
+              const json = JSON.parse(msgStr);
+              if (json.event === "reset_config_done") {
+                showResetSuccessState(json.ap_ssid || "ESP32_TuoiCay_IoT", json.ap_ip || "192.168.4.1");
+              }
+            } catch (e) {}
+          }
+        });
+      } catch (e) {}
+    }
+
+    function connectMqtt() {
+      initWokwiBrowserFallback();
+      const options = {
+        clientId: "WebDashboard_" + Math.random().toString(16).substring(2, 8),
+        username: "user1",
+        password: "123",
+        clean: true,
+        reconnectPeriod: 2500
+      };
+
+      try {
+        mqttClient = mqtt.connect(wsUrl, options);
+
+        mqttClient.on("connect", () => {
+          document.getElementById("wsStatusDot").classList.add("connected");
+          document.getElementById("wsStatusText").innerText = "MQTT: Đã kết nối";
+          mqttClient.subscribe(["esp32/soil_moisture/data", "sensor/data", "esp32/status"], () => {});
+        });
+
+        mqttClient.on("close", () => {
+          document.getElementById("wsStatusDot").classList.remove("connected");
+          document.getElementById("wsStatusText").innerText = "MQTT: Mất kết nối";
+        });
+
+        mqttClient.on("message", (topic, message) => {
+          try {
+            const json = JSON.parse(message.toString());
+            if (topic === "esp32/status" && json.event === "reset_config_done") {
+              showResetSuccessState(json.ap_ssid || "ESP32_TuoiCay_IoT", json.ap_ip || "192.168.4.1");
+              return;
+            }
+            handleIncomingData(json);
+          } catch (e) {}
+        });
+      } catch (e) {}
+    }
+
+    // ==================== CẬP NHẬT GIAO DIỆN SINH ĐỘNG THỜI GIAN THỰC ====================
+    function handleIncomingData(data) {
+      latestData = data;
+      const moisture = Math.min(100, Math.max(0, Math.round(data.moisture !== undefined ? data.moisture : data.hum || 0)));
+      const raw = data.raw || 0;
+      const voltNum = (data.voltage !== undefined) ? Number(data.voltage) : ((raw * 3.3) / 4095);
+      const volt = voltNum.toFixed(2);
+      const isWaterEmpty = data.water_empty === true || data.water_empty === 1;
+      const isPumpOn = data.pump === true || data.pump === 1 || data.pump === "BAT";
+      const isDaylight = (data.light !== undefined)
+        ? (data.light === true || data.light === 1 || data.light === "CO SANG")
+        : (data.light_status !== "MAT SANG");
+      const mode = data.mode || "AUTO";
+
+      if (data.ip) {
+        document.getElementById("espIpBadge").innerText = `IP: ${data.ip}`;
+        document.getElementById("btnOpenEspConfig").href = `http://${data.ip}/config`;
+      }
+
+      document.getElementById("lastUpdateLabel").innerText = new Date().toLocaleTimeString();
+
+      // ---------------- 1. CẬP NHẬT THẺ ĐỘ ẨM ĐẤT (MẶT CẮT TẦNG ĐẤT & KIM BÁN NGUYỆT) ----------------
+      document.getElementById("gaugeNumText").innerHTML = `${moisture}<small>% RH</small>`;
+      document.getElementById("soilRawChip").innerText = `Raw: ${raw}`;
+
+      // Mặt cắt tầng đất: mực nước ngầm dâng từ y=98 (0%) lên y=2 (100%)
+      const soilWaveY = 98 - (moisture * 0.96);
+      document.getElementById("soilMoistureWaveGroup").style.transform = `translateY(${soilWaveY}px)`;
+
+      // Cột thước đo bên phải (cao tối đa 102px)
+      const barH = Math.round((moisture / 100) * 102);
+      const vertBar = document.getElementById("soilVertBarFill");
+      vertBar.setAttribute("y", 138 - barH);
+      vertBar.setAttribute("height", barH);
+
+      document.getElementById("soilSidePct").textContent = `${moisture}%`;
+      document.getElementById("soilWateringDrops").style.display = isPumpOn ? "block" : "none";
+
+      // Kim bán nguyệt (dự phòng khi bấm chuyển tab)
+      const soilAngle = -90 + (moisture * 1.8);
+      document.getElementById("gaugeNeedle").style.transform = `rotate(${soilAngle}deg)`;
+      document.getElementById("svgGaugeCenterNum").textContent = `${moisture}% RH`;
+
+      const soilBadge = document.getElementById("gaugeStatusBadge");
+      const soilStatusText = document.getElementById("gaugeStatusText");
+      const soilSideState = document.getElementById("soilSideState");
+      const soilSideHint = document.getElementById("soilSideHint");
+      const soilCracks = document.getElementById("soilDryCracks");
+      const plantSprout = document.getElementById("soilPlantSprout");
+      const needlePoly = document.getElementById("svgNeedlePoly");
+      const needleRing = document.getElementById("svgNeedleCenterRing");
+
+      if (moisture < 40) {
+        soilStatusText.innerText = `Khô hạn (${moisture}% < 40%)`;
+        soilBadge.style.color = "#f87171";
+        soilBadge.style.borderColor = "rgba(239,68,68,0.5)";
+        soilBadge.style.background = "rgba(239,68,68,0.16)";
+        soilSideState.textContent = "🔥 KHÔ HẠN";
+        soilSideState.setAttribute("fill", "#ef4444");
+        soilSideHint.textContent = "Cần cấp nước";
+        vertBar.setAttribute("fill", "#ef4444");
+        soilCracks.setAttribute("opacity", "0.85");
+        plantSprout.style.transform = "scale(0.92) rotate(5deg)";
+        needlePoly.setAttribute("fill", "#ef4444");
+        needleRing.setAttribute("stroke", "#ef4444");
+      } else if (moisture <= 70) {
+        soilStatusText.innerText = `Đủ ẩm lý tưởng (${moisture}%)`;
+        soilBadge.style.color = "#34d399";
+        soilBadge.style.borderColor = "rgba(16,185,129,0.5)";
+        soilBadge.style.background = "rgba(16,185,129,0.16)";
+        soilSideState.textContent = "🌿 ĐỦ ẨM TỐT";
+        soilSideState.setAttribute("fill", "#10b981");
+        soilSideHint.textContent = "Cây phát triển tốt";
+        vertBar.setAttribute("fill", "#10b981");
+        soilCracks.setAttribute("opacity", "0");
+        plantSprout.style.transform = "scale(1.06) rotate(0deg)";
+        needlePoly.setAttribute("fill", "#10b981");
+        needleRing.setAttribute("stroke", "#10b981");
+      } else {
+        soilStatusText.innerText = `Đất ướt đẫm (${moisture}% > 70%)`;
+        soilBadge.style.color = "#38bdf8";
+        soilBadge.style.borderColor = "rgba(56,189,248,0.5)";
+        soilBadge.style.background = "rgba(6,182,212,0.16)";
+        soilSideState.textContent = "💦 ƯỚT ĐẪM";
+        soilSideState.setAttribute("fill", "#38bdf8");
+        soilSideHint.textContent = "Ngắt bơm tự động";
+        vertBar.setAttribute("fill", "#06b6d4");
+        soilCracks.setAttribute("opacity", "0");
+        plantSprout.style.transform = "scale(1.08) rotate(0deg)";
+        needlePoly.setAttribute("fill", "#f59e0b");
+        needleRing.setAttribute("stroke", "#f59e0b");
+      }
+
+      // ---------------- 2. CẬP NHẬT THẺ ĐIỆN ÁP CẢM BIẾN (VÒNG KHUYẾT NEON) ----------------
+      const clampedVolt = Math.min(3.3, Math.max(0, voltNum));
+      const arcTotal = 395;
+      const dashOffset = arcTotal - ((clampedVolt / 3.3) * arcTotal);
+      document.getElementById("voltNeonProgressArc").style.strokeDashoffset = dashOffset.toFixed(1);
+
+      document.getElementById("voltGaugeNumText").innerHTML = `${volt}<small>V</small>`;
+      document.getElementById("voltAdcChip").innerText = `ADC: ${raw} / 4095`;
+      document.getElementById("voltGaugeCenterNum").textContent = `${volt}V`;
+      document.getElementById("voltGaugeSubDesc").textContent = `ADC 12-bit: ${raw}`;
+
+      const voltBadge = document.getElementById("voltGaugeBadge");
+      const voltStatusText = document.getElementById("voltStatusText");
+      const voltSubLabel = document.getElementById("voltLevelSubLabel");
+
+      if (voltNum <= 1.15) {
+        voltStatusText.innerText = `Áp thấp - Đất ướt (${volt}V)`;
+        voltSubLabel.textContent = "WET SIGNAL";
+        voltSubLabel.setAttribute("fill", "#06b6d4");
+        voltBadge.style.color = "#38bdf8";
+      } else if (voltNum <= 1.75) {
+        voltStatusText.innerText = `Áp chuẩn - Đủ ẩm (${volt}V)`;
+        voltSubLabel.textContent = "OPTIMAL VOLT";
+        voltSubLabel.setAttribute("fill", "#10b981");
+        voltBadge.style.color = "#34d399";
+      } else {
+        voltStatusText.innerText = `Áp cao - Đất khô (${volt}V)`;
+        voltSubLabel.textContent = "DRY SIGNAL";
+        voltSubLabel.setAttribute("fill", "#fbbf24");
+        voltBadge.style.color = "#fbbf24";
+      }
+
+      // ---------------- 3. CẬP NHẬT THẺ CẢM BIẾN PHAO (BỒN NƯỚC & PHAO NỔI LIVE) ----------------
+      const tankWaterGroup = document.getElementById("tankWaterLevelGroup");
+      const tankBuoyGroup = document.getElementById("tankBuoyPosGroup");
+      const tankBorder = document.getElementById("tankBorderRect");
+      const tankBuoyRect = document.getElementById("tankBuoyRect");
+      const tankBubbles = document.getElementById("tankBubblesGroup");
+      const floatNumText = document.getElementById("floatGaugeNumText");
+      const floatPinChip = document.getElementById("floatPinChip");
+      const floatSidePct = document.getElementById("floatSidePct");
+      const floatSideInterlock = document.getElementById("floatSideInterlock");
+      const floatSideSub = document.getElementById("floatSideSub");
+      const floatBadge = document.getElementById("floatGaugeBadge");
+      const floatFooterText = document.getElementById("floatStatusFooterText");
+
+      if (isWaterEmpty) {
+        // Bồn cạn nước: nước tụt sát đáy, phao hạ xuống
+        tankWaterGroup.style.transform = "translateY(114px)";
+        tankBuoyGroup.style.transform = "translateY(108px)";
+        tankBubbles.style.display = "none";
+        tankBorder.setAttribute("stroke", "#ef4444");
+        tankBuoyRect.setAttribute("fill", "#ef4444");
+        floatNumText.innerText = "CẠN NƯỚC";
+        floatNumText.style.color = "#ef4444";
+        floatPinChip.innerText = "GPIO 33: HIGH (Hở)";
+        floatSidePct.textContent = "0%";
+        floatSidePct.setAttribute("fill", "#ef4444");
+        floatSideInterlock.textContent = "🔒 KHÓA BƠM";
+        floatSideInterlock.setAttribute("fill", "#ef4444");
+        floatSideSub.textContent = "Cảnh báo hết nước!";
+        floatFooterText.innerText = "Cạn nước! Đã khóa cứng bơm";
+        floatBadge.style.color = "#f87171";
+        floatBadge.style.borderColor = "rgba(239,68,68,0.5)";
+        floatBadge.style.background = "rgba(239,68,68,0.16)";
+      } else {
+        // Bồn đầy nước: sóng dâng cao, phao nổi dập dềnh
+        tankWaterGroup.style.transform = "translateY(32px)";
+        tankBuoyGroup.style.transform = "translateY(28px)";
+        tankBubbles.style.display = "block";
+        tankBorder.setAttribute("stroke", "#38bdf8");
+        tankBuoyRect.setAttribute("fill", "#fbbf24");
+        floatNumText.innerText = "ĐẦY NƯỚC";
+        floatNumText.style.color = "#38bdf8";
+        floatPinChip.innerText = "GPIO 33: LOW (Đóng)";
+        floatSidePct.textContent = "100%";
+        floatSidePct.setAttribute("fill", "#38bdf8");
+        floatSideInterlock.textContent = "🔓 CHO PHÉP BƠM";
+        floatSideInterlock.setAttribute("fill", "#34d399");
+        floatSideSub.textContent = "Mực nước an toàn";
+        floatFooterText.innerText = "Bồn đầy nước (An toàn)";
+        floatBadge.style.color = "#38bdf8";
+        floatBadge.style.borderColor = "rgba(56,189,248,0.45)";
+        floatBadge.style.background = "rgba(6,182,212,0.16)";
+      }
+
+      // ---------------- 4. CẬP NHẬT THẺ CẢM BIẾN ÁNH SÁNG (VÒM KHÍ TƯỢNG NGÀY - ĐÊM) ----------------
+      const skyDay = document.getElementById("skyBgRectDay");
+      const skyNight = document.getElementById("skyBgRectNight");
+      const starsGroup = document.getElementById("nightStarsGroup");
+      const sunGroup = document.getElementById("daySunGroup");
+      const moonGroup = document.getElementById("nightMoonGroup");
+      const lightNumText = document.getElementById("lightGaugeNumText");
+      const lightPinChip = document.getElementById("lightPinChip");
+      const lightBadge = document.getElementById("lightGaugeBadge");
+      const lightFooterText = document.getElementById("lightStatusFooterText");
+      const skyBorder = document.getElementById("skyDomeBorder");
+
+      if (isDaylight) {
+        skyDay.setAttribute("opacity", "1");
+        skyNight.setAttribute("opacity", "0");
+        starsGroup.style.opacity = "0";
+        sunGroup.style.opacity = "1";
+        sunGroup.style.transform = "translateY(0px)";
+        moonGroup.style.opacity = "0";
+        moonGroup.style.transform = "translateY(48px)";
+        skyBorder.setAttribute("stroke", "rgba(250, 204, 21, 0.35)");
+
+        lightNumText.innerText = "CÓ SÁNG";
+        lightNumText.style.color = "#fcd34d";
+        lightPinChip.innerText = "DO: LOW (Ban ngày)";
+        lightFooterText.innerText = "Trời nắng sáng (Tạm dừng AUTO)";
+        lightBadge.style.color = "#fcd34d";
+        lightBadge.style.borderColor = "rgba(252,211,77,0.45)";
+        lightBadge.style.background = "rgba(252,211,77,0.15)";
+      } else {
+        skyDay.setAttribute("opacity", "0");
+        skyNight.setAttribute("opacity", "1");
+        starsGroup.style.opacity = "1";
+        sunGroup.style.opacity = "0";
+        sunGroup.style.transform = "translateY(48px)";
+        moonGroup.style.opacity = "1";
+        moonGroup.style.transform = "translateY(0px)";
+        skyBorder.setAttribute("stroke", "rgba(129, 140, 248, 0.45)");
+
+        lightNumText.innerText = "MẤT SÁNG";
+        lightNumText.style.color = "#a5b4fc";
+        lightPinChip.innerText = "DO: HIGH (Ban đêm)";
+        lightFooterText.innerText = "Ban đêm (Kích hoạt tưới AUTO)";
+        lightBadge.style.color = "#a5b4fc";
+        lightBadge.style.borderColor = "rgba(129,140,248,0.5)";
+        lightBadge.style.background = "rgba(129,140,248,0.18)";
+      }
+
+      // ---------------- THẺ VÙNG 1 ----------------
+      document.getElementById("zoneVoltage").innerText = `${volt} V`;
+      document.getElementById("zoneBigNum").innerHTML = `${moisture} <span style="font-size:24px;color:var(--text-sub)">%</span>`;
+      document.getElementById("zoneProgress").style.width = `${moisture}%`;
+      const statusText = document.getElementById("zoneStatusText");
+
+      if (isWaterEmpty) {
+        statusText.innerText = "Trạng thái: BỒN CẠN NƯỚC (KHÓA AN TOÀN NGẮT BƠM)";
+        statusText.style.color = "#ef4444";
+      } else if (mode === "AUTO") {
+        if (isDaylight) {
+          statusText.innerText = "Trạng thái [AUTO]: BAN NGÀY ☀️ DỪNG BƠM HẲN (Chỉ tự động tưới ban đêm)";
+          statusText.style.color = "#fcd34d";
+        } else {
+          if (isPumpOn) {
+            statusText.innerText = `Trạng thái [AUTO]: BAN ĐÊM 🌙 ĐANG TƯỚI NƯỚC (Độ ẩm: ${moisture}% ➜ Ngắt khi đạt >70%)`;
+            statusText.style.color = "#34d399";
+          } else if (moisture < 40) {
+            statusText.innerText = "Trạng thái [AUTO]: BAN ĐÊM 🌙 ĐỘ ẨM THẤP (<40%) ➜ BẬT BƠM TỨC THÌ!";
+            statusText.style.color = "#ef4444";
+          } else {
+            statusText.innerText = "Trạng thái [AUTO]: BAN ĐÊM 🌙 ĐỘ ẨM ĐỦ (Chờ khô <40% sẽ tự bơm)";
+            statusText.style.color = "#10b981";
+          }
+        }
+      } else {
+        statusText.innerText = `Trạng thái [MANUAL]: ĐIỀU KHIỂN TAY (${isDaylight ? 'BAN NGÀY ☀️' : 'BAN ĐÊM 🌙'} BẬT/TẮT TỰ DO)`;
+        statusText.style.color = "#38bdf8";
+      }
+
+      // ---------------- CẬP NHẬT 4 ĐỒ THỊ THỜI GIAN THỰC ----------------
+      const nowMs = Date.now();
+      if (nowMs - lastChartPushTime >= 900) {
+        lastChartPushTime = nowMs;
+
+        // 1. Đồ thị Độ ẩm đất (Đường cong miền Xanh lá - Giữ nguyên)
+        moistureHistory.shift();
+        moistureHistory.push(moisture);
+        realtimeChart.update();
+
+        // 2. Đồ thị Cột phổ Điện áp + Thống kê Min/Avg/Max
+        voltageHistory.shift();
+        voltageHistory.push(Number(volt));
+        const validVolts = voltageHistory.filter(v => v !== null && !isNaN(v));
+        if (validVolts.length > 0) {
+          const vMin = Math.min(...validVolts);
+          const vMax = Math.max(...validVolts);
+          const vAvg = validVolts.reduce((a, b) => a + b, 0) / validVolts.length;
+          document.getElementById("voltMinStat").innerText = vMin.toFixed(2) + "V";
+          document.getElementById("voltAvgStat").innerText = vAvg.toFixed(2) + "V";
+          document.getElementById("voltMaxStat").innerText = vMax.toFixed(2) + "V";
+        }
+        voltageChart.update();
+
+        // 3. Đồ thị Kép Phao Nước (Doughnut Tỷ lệ + Dao động ký Xung Logic)
+        floatHistory.shift();
+        floatHistory.push(isWaterEmpty ? 0 : 100);
+        const validFloats = floatHistory.filter(v => v !== null);
+        const fullCount = validFloats.filter(v => v === 100).length;
+        const emptyCount = validFloats.filter(v => v === 0).length;
+        const safeRatio = validFloats.length > 0 ? Math.round((fullCount / validFloats.length) * 100) : 100;
+
+        floatDoughnutChart.data.datasets[0].data = (fullCount === 0 && emptyCount === 0) ? [1, 0] : [fullCount, emptyCount];
+        floatDoughnutChart.update();
+
+        const safePctEl = document.getElementById("floatSafePctLabel");
+        safePctEl.innerText = `${safeRatio}%`;
+        safePctEl.style.color = isWaterEmpty ? "#ef4444" : "#38bdf8";
+        document.getElementById("floatDoughnutSub").innerText = `Đầy: ${fullCount} | Cạn: ${emptyCount}`;
+
+        floatChart.data.datasets[0].borderColor = isWaterEmpty ? "#ef4444" : "#0ea5e9";
+        floatChart.update();
+
+        // 4. Đồ thị Kẹo mút Quang học Ánh sáng (Lollipop Chart + Bộ đếm Sáng/Đêm)
+        lightHistory.shift();
+        lightHistory.push(isDaylight ? 92 : 18);
+        const validLights = lightHistory.filter(v => v !== null);
+        const daySamples = validLights.filter(v => v >= 50).length;
+        const nightSamples = validLights.filter(v => v < 50).length;
+        const dayPct = validLights.length > 0 ? Math.round((daySamples / validLights.length) * 100) : 50;
+
+        document.getElementById("solarDayCountLabel").innerText = `☀️ Sáng: ${daySamples} mẫu`;
+        document.getElementById("solarNightCountLabel").innerText = `🌙 Đêm: ${nightSamples} mẫu`;
+        document.getElementById("solarRatioBarFill").style.width = `${dayPct}%`;
+        lightChart.update();
+      }
+
+      // ---------------- ĐIỀU KHIỂN & KHÓA AN TOÀN ----------------
+      const banner = document.getElementById("waterEmptyBanner");
+      const btnPump = document.getElementById("btnTogglePump");
+      const btnMode = document.getElementById("btnToggleMode");
+
+      if (isWaterEmpty) {
+        banner.style.display = "block";
+        btnPump.disabled = true;
+      } else {
+        banner.style.display = "none";
+        btnPump.disabled = (mode === "AUTO");
+      }
+
+      btnMode.className = `ctrl-btn btn-mode ${mode === "AUTO" ? "auto" : ""}`;
+      document.getElementById("btnModeLabel").innerText = `CHẾ ĐỘ: ${mode}`;
+
+      btnPump.className = `ctrl-btn btn-pump ${isPumpOn ? "active" : ""}`;
+      document.getElementById("btnPumpLabel").innerText = isPumpOn ? "BƠM: ĐANG BẬT" : "BƠM: ĐANG TẮT";
+
+      // ---------------- SƠ ĐỒ NỐI DÂY SVG ----------------
+      document.getElementById("svgSoilReadout").textContent = `${moisture}% RH`;
+
+      const lightIcon = document.getElementById("lightIcon");
+      const lightStatusText = document.getElementById("lightStatusText");
+      const zoneLightPill = document.getElementById("zoneLightPill");
+      const svgLightReadout = document.getElementById("svgLightReadout");
+      const svgLightRect = document.getElementById("svgLightRect");
+
+      if (isDaylight) {
+        lightIcon.innerText = "☀️";
+        lightStatusText.innerText = "Ánh sáng: CÓ SÁNG";
+        zoneLightPill.innerText = "☀️ CÓ SÁNG";
+        zoneLightPill.style.color = "#fcd34d";
+        zoneLightPill.style.borderColor = "#fcd34d";
+        zoneLightPill.style.background = "rgba(252, 211, 77, 0.15)";
+        svgLightReadout.textContent = "☀️ CÓ SÁNG";
+        svgLightReadout.setAttribute("fill", "#fcd34d");
+        svgLightRect.setAttribute("stroke", "#fcd34d");
+      } else {
+        lightIcon.innerText = "🌙";
+        lightStatusText.innerText = "Ánh sáng: MẤT SÁNG";
+        zoneLightPill.innerText = "🌙 MẤT SÁNG";
+        zoneLightPill.style.color = "#818cf8";
+        zoneLightPill.style.borderColor = "#818cf8";
+        zoneLightPill.style.background = "rgba(129, 140, 248, 0.15)";
+        svgLightReadout.textContent = "🌙 MẤT SÁNG";
+        svgLightReadout.setAttribute("fill", "#818cf8");
+        svgLightRect.setAttribute("stroke", "#818cf8");
+      }
+
+      const floatReadout = document.getElementById("svgFloatReadout");
+      const floatRect = document.getElementById("svgFloatRect");
+      if (isWaterEmpty) {
+        floatReadout.textContent = "CẠN NƯỚC";
+        floatReadout.setAttribute("fill", "#ef4444");
+        floatRect.setAttribute("stroke", "#ef4444");
+      } else {
+        floatReadout.textContent = "ĐẦY NƯỚC";
+        floatReadout.setAttribute("fill", "#38bdf8");
+        floatRect.setAttribute("stroke", "#06b6d4");
+      }
+
+      const relayReadout = document.getElementById("svgRelayReadout");
+      const pumpCircle = document.getElementById("svgPumpCircle");
+      const pumpStateText = document.getElementById("svgPumpStateText");
+      if (isPumpOn) {
+        relayReadout.textContent = "RELAY: BẬT";
+        relayReadout.setAttribute("fill", "#34d399");
+        pumpCircle.setAttribute("stroke", "#06b6d4");
+        pumpCircle.setAttribute("filter", "url(#neonGlow)");
+        pumpStateText.textContent = "BẬT";
+        pumpStateText.setAttribute("fill", "#06b6d4");
+      } else {
+        relayReadout.textContent = "RELAY: TẮT";
+        relayReadout.setAttribute("fill", "#fcd34d");
+        pumpCircle.setAttribute("stroke", "#475569");
+        pumpCircle.removeAttribute("filter");
+        pumpStateText.textContent = "TẮT";
+        pumpStateText.setAttribute("fill", "#64748b");
+      }
+
+      const ledDot = document.getElementById("svgAlarmLedDot");
+      if (isWaterEmpty) {
+        ledDot.setAttribute("fill", "#ef4444");
+        ledDot.setAttribute("filter", "url(#neonGlow)");
+      } else {
+        ledDot.setAttribute("fill", "#475569");
+        ledDot.removeAttribute("filter");
+      }
+
+      document.getElementById("svgLcdL1").textContent = `Am dat: ${moisture}% [${mode === 'AUTO' ? 'A' : 'M'}]`;
+      if (isWaterEmpty) {
+        document.getElementById("svgLcdL2").textContent = "CANH BAO: CAN NUOC!";
+      } else {
+        document.getElementById("svgLcdL2").textContent = `BOM: ${isPumpOn ? 'BAT' : 'TAT'} | ${isDaylight ? 'NGAY' : 'DEM'}`;
+      }
+    }
+
+    // ==================== GỬI LỆNH ĐIỀU KHIỂN & RESET EEPROM ====================
+    function sendMqttCommand(action) {
+      if (latestData.water_empty && action === "toggle_pump") {
+        alert("Khóa an toàn: Bồn đang cạn nước, không thể bật bơm!");
+        return;
+      }
+      if (latestData.mode === "AUTO" && action === "toggle_pump") {
+        alert("Hệ thống đang ở chế độ AUTO (tự động theo ban đêm). Vui lòng chuyển sang MANUAL để bật/tắt bơm tự do!");
+        return;
+      }
+      let cmd = {};
+      if (action === "toggle_mode") {
+        const nextMode = (latestData.mode === "AUTO") ? "MANUAL" : "AUTO";
+        cmd = { action: "set_mode", mode: nextMode };
+      } else if (action === "toggle_pump") {
+        cmd = { action: "set_pump", state: !latestData.pump };
+      }
+
+      if (mqttClient && mqttClient.connected) {
+        mqttClient.publish("esp32/soil_moisture/control", JSON.stringify(cmd));
+        mqttClient.publish("sensor/control", JSON.stringify(cmd));
+      }
+      if (wokwiBrowserBridge && wokwiBrowserBridge.connected) {
+        wokwiBrowserBridge.publish(WOKWI_WS_TOPIC_CONTROL, JSON.stringify(cmd));
+      }
+
+      fetch(`/api/control?action=${action}`)
+        .then(r => r.json())
+        .catch(() => {});
+    }
+
+    const defaultResetModalHtml = document.getElementById("resetModalBody").innerHTML;
+
+    function openResetEepromModal() {
+      document.getElementById("resetModalBody").innerHTML = defaultResetModalHtml;
+      document.getElementById("resetEepromModal").classList.add("active");
+    }
+
+    function closeResetEepromModal() {
+      document.getElementById("resetEepromModal").classList.remove("active");
+    }
+
+    function showResetSuccessState(apSsid, apIp) {
+      document.getElementById("resetEepromModal").classList.add("active");
+      document.getElementById("resetModalBody").innerHTML = `
+        <div style="padding:8px 0;text-align:left">
+          <div style="color:#34d399;font-size:15px;font-weight:800;margin-bottom:10px;text-align:center">
+            ✅ ĐÃ XÓA EEPROM &amp; CHUYỂN CHẾ ĐỘ CẤU HÌNH!
+          </div>
+          <div class="qr-note" style="border:1px solid rgba(16,185,129,0.45);color:#e2e8f0">
+            📡 <b>Bước 1:</b> Trên điện thoại hoặc máy tính, hãy kết nối vào Wi-Fi:<br>
+            &nbsp;&nbsp;&nbsp;👉 Tên Wi-Fi: <b style="color:#38bdf8">${apSsid}</b> (Mật khẩu: <code>12345678</code>)<br><br>
+            🌐 <b>Bước 2:</b> Mở trình duyệt truy cập trang cấu hình:<br>
+            &nbsp;&nbsp;&nbsp;👉 Địa chỉ: <a href="http://${apIp}" target="_blank" style="color:#fcd34d;font-weight:700">http://${apIp}</a>
+          </div>
+          <button class="copy-btn" style="width:100%;margin-top:14px;padding:10px;font-size:13px" onclick="closeResetEepromModal()">Đã hiểu &amp; Đóng</button>
+        </div>
+      `;
+    }
+
+    function confirmResetEeprom() {
+      const cmd = { action: "reset_config" };
+      if (mqttClient && mqttClient.connected) {
+        mqttClient.publish("esp32/soil_moisture/control", JSON.stringify(cmd));
+        mqttClient.publish("sensor/control", JSON.stringify(cmd));
+      }
+      if (wokwiBrowserBridge && wokwiBrowserBridge.connected) {
+        wokwiBrowserBridge.publish(WOKWI_WS_TOPIC_CONTROL, JSON.stringify(cmd));
+      }
+      fetch("/api/control?action=reset_config")
+        .then(r => r.json())
+        .catch(() => {});
+
+      showResetSuccessState("ESP32_TuoiCay_IoT", "192.168.4.1");
+    }
+
+    function fetchLatestData() {
+      fetch("/api/latest")
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.moisture !== undefined) {
+            handleIncomingData(data);
+            if (!mqttClient || !mqttClient.connected) {
+              document.getElementById("wsStatusDot").classList.add("connected");
+              document.getElementById("wsStatusText").innerText = "Đã đồng bộ";
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
+    function loadDbHistory() {
+      fetch("/api/history")
+        .then(res => res.json())
+        .then(rows => {
+          const tbody = document.getElementById("historyTableBody");
+          if (!rows || rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text-sub)">Chưa có bản ghi nào trong Database</td></tr>`;
+            return;
+          }
+          let html = "";
+          rows.forEach(r => {
+            const pumpBadge = r.pump_status ? `<span style="color:#34d399;font-weight:700">BẬT</span>` : `<span style="color:#94a3b8">TẮT</span>`;
+            const waterBadge = r.water_empty ? `<span style="color:#ef4444;font-weight:700">CẠN</span>` : `<span style="color:#38bdf8">ĐẦY</span>`;
+            const lightBadge = (r.light_status === 'CO SANG' || r.light_status === 'DAYLIGHT')
+              ? `<span style="color:#fcd34d;font-weight:700">☀️ CÓ SÁNG</span>`
+              : `<span style="color:#818cf8;font-weight:700">🌙 MẤT SÁNG</span>`;
+            html += `
+              <tr>
+                <td>#${r.id}</td>
+                <td>${r.device}</td>
+                <td style="font-weight:700;color:#10b981">${r.moisture}%</td>
+                <td>${r.raw_adc}</td>
+                <td>${r.voltage ? r.voltage.toFixed(2) : '--'} V</td>
+                <td>${lightBadge}</td>
+                <td>${waterBadge}</td>
+                <td>${pumpBadge}</td>
+                <td>${r.mode}</td>
+                <td style="color:#94a3b8;font-size:12px">${r.created_at}</td>
+              </tr>
+            `;
+          });
+          tbody.innerHTML = html;
+        })
+        .catch(() => {});
+    }
+
+    function openQrModal() {
+      fetch('/api/info')
+        .then(r => r.json())
+        .then(info => {
+          if (info && info.url) {
+            document.getElementById("qrLanUrl").innerText = info.url;
+            document.getElementById("qrImage").src = `/api/qr?t=${Date.now()}`;
+          }
+        })
+        .catch(() => {
+          const fallbackUrl = `http://${window.location.hostname}:3000`;
+          document.getElementById("qrLanUrl").innerText = fallbackUrl;
+        });
+      document.getElementById("qrModal").classList.add("active");
+    }
+
+    function closeQrModal() {
+      document.getElementById("qrModal").classList.remove("active");
+    }
+
+    function copyLanUrl() {
+      const url = document.getElementById("qrLanUrl").innerText;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => alert("✅ Đã sao chép đường dẫn: " + url));
+      } else {
+        alert("Đường dẫn: " + url);
+      }
+    }
+
+    // ==================== CHUYỂN ĐỔI GIAO DIỆN TRẮNG (SÁNG) / ĐEN (TỐI) ====================
+    function applyTheme(theme) {
+      const isLight = (theme === "light");
+      document.body.classList.toggle("light-theme", isLight);
+      localStorage.setItem("dashboard_theme", isLight ? "light" : "dark");
+
+      const iconEl = document.getElementById("themeToggleIcon");
+      const textEl = document.getElementById("themeToggleText");
+      if (isLight) {
+        iconEl.innerText = "🌙";
+        textEl.innerText = "Giao Diện Đen";
+      } else {
+        iconEl.innerText = "☀️";
+        textEl.innerText = "Giao Diện Trắng";
+      }
+
+      // Đồng bộ màu chữ & lưới của 4 đồ thị theo nền Trắng / Đen
+      const tickColor = isLight ? "#475569" : "#94a3b8";
+      const moistureGrid = isLight ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.08)";
+
+      realtimeChart.options.scales.x.ticks.color = tickColor;
+      realtimeChart.options.scales.y.ticks.color = tickColor;
+      realtimeChart.options.scales.x.grid.color = moistureGrid;
+      realtimeChart.options.scales.y.grid.color = moistureGrid;
+      realtimeChart.update("none");
+
+      voltageChart.options.scales.x.ticks.color = tickColor;
+      voltageChart.options.scales.y.ticks.color = tickColor;
+      voltageChart.update("none");
+
+      floatChart.options.scales.x.ticks.color = tickColor;
+      floatChart.options.scales.y.ticks.color = isLight ? "#0284c7" : "#38bdf8";
+      floatChart.update("none");
+
+      lightChart.options.scales.x.ticks.color = tickColor;
+      lightChart.options.scales.y.ticks.color = tickColor;
+      lightChart.update("none");
+    }
+
+    function toggleTheme() {
+      const currentlyLight = document.body.classList.contains("light-theme");
+      applyTheme(currentlyLight ? "dark" : "light");
+    }
+
+    // ==================== QUẢN LÝ & XÓA DỮ LIỆU MYSQL (iot_db -> LOG) ====================
+    function loadMysqlHistory() {
+      fetch("/api/mysql/history")
+        .then(res => res.json())
+        .then(data => {
+          const badge = document.getElementById("mysqlStatusBadge");
+          const tbody = document.getElementById("mysqlTableBody");
+
+          if (!data || !data.connected) {
+            badge.innerHTML = `<span style="color:#f87171">🔴 MySQL chưa kết nối</span>`;
+            tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-sub)">Không kết nối được MySQL (iot_db.LOG). Hãy đảm bảo dịch vụ MySQL đang bật!</td></tr>`;
+            return;
+          }
+
+          badge.innerHTML = `<span style="color:#10b981;font-weight:700">🟢 MySQL Đã kết nối | Tổng: ${data.total} bản ghi</span>`;
+          const rows = data.rows || [];
+          if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-sub)">Bảng MySQL (iot_db.LOG) hiện đang trống (0 bản ghi)</td></tr>`;
+            return;
+          }
+
+          let html = "";
+          rows.forEach(r => {
+            const pumpVal = (r.pump_status === 1 || (r.status && r.status.includes("BAT")));
+            const pumpBadge = pumpVal
+              ? `<span style="color:#10b981;font-weight:700">BẬT</span>`
+              : `<span style="color:var(--text-sub)">TẮT</span>`;
+            const isCan = (r.water_empty === 1 || r.water_level === "CAN" || r.water_level === "CẠN");
+            const waterBadge = isCan
+              ? `<span style="color:#ef4444;font-weight:700">CẠN</span>`
+              : `<span style="color:#0284c7;font-weight:700">ĐẦY</span>`;
+            const lightStr = r.light_status || "CO SANG";
+            const lightBadge = (lightStr === "MAT SANG")
+              ? `<span style="color:#6366f1;font-weight:700">🌙 MẤT SÁNG</span>`
+              : `<span style="color:#d97706;font-weight:700">☀️ CÓ SÁNG</span>`;
+            const timeStr = r.created_at ? new Date(r.created_at).toLocaleString("vi-VN") : "--";
+
+            html += `
+              <tr>
+                <td><b>#${r.id}</b></td>
+                <td>${r.device || "ESP32_TuoiCay"}</td>
+                <td style="font-weight:700;color:#10b981">${r.moisture !== null && r.moisture !== undefined ? r.moisture : 0}%</td>
+                <td>${r.raw_adc !== null && r.raw_adc !== undefined ? r.raw_adc : 0}</td>
+                <td>${r.voltage !== null && r.voltage !== undefined ? Number(r.voltage).toFixed(2) : "0.00"} V</td>
+                <td>${lightBadge}</td>
+                <td>${waterBadge}</td>
+                <td>${pumpBadge}</td>
+                <td>${r.mode || "AUTO"}</td>
+                <td style="color:var(--text-sub);font-size:12px">${timeStr}</td>
+                <td>
+                  <button class="btn-del-row" onclick="deleteMysqlRow(${r.id})" title="Xóa dòng #${r.id}">✖</button>
+                </td>
+              </tr>
+            `;
+          });
+          tbody.innerHTML = html;
+        })
+        .catch(() => {});
+    }
+
+    function pushCurrentToMysql() {
+      const btn = document.getElementById("btnMysqlPushNow");
+      const oldText = btn.innerHTML;
+      btn.innerHTML = "⏳ Đang gửi...";
+      fetch("/api/mysql/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(latestData || {})
+      })
+        .then(r => r.json())
+        .then(res => {
+          if (res && res.success) {
+            btn.innerHTML = `✅ Đã lưu MySQL (#${res.insertId || "OK"})`;
+            loadMysqlHistory();
+          } else {
+            btn.innerHTML = "❌ Lỗi lưu MySQL";
+          }
+          setTimeout(() => { btn.innerHTML = oldText; }, 1800);
+        })
+        .catch(() => {
+          btn.innerHTML = "❌ Lỗi kết nối";
+          setTimeout(() => { btn.innerHTML = oldText; }, 1800);
+        });
+    }
+
+    function openClearMysqlModal() {
+      document.getElementById("clearMysqlModal").classList.add("active");
+    }
+
+    function closeClearMysqlModal() {
+      document.getElementById("clearMysqlModal").classList.remove("active");
+    }
+
+    function confirmClearMysql() {
+      fetch("/api/mysql/clear", { method: "POST" })
+        .then(r => r.json())
+        .then(res => {
+          closeClearMysqlModal();
+          if (res && res.success) {
+            loadMysqlHistory();
+          } else {
+            alert("❌ Không thể xóa dữ liệu MySQL: " + ((res && res.error) || "Lỗi không xác định"));
+          }
+        })
+        .catch(() => {
+          closeClearMysqlModal();
+          alert("❌ Lỗi kết nối tới máy chủ khi xóa dữ liệu MySQL!");
+        });
+    }
+
+    function deleteMysqlRow(id) {
+      fetch(`/api/mysql/clear?id=${id}`, { method: "POST" })
+        .then(r => r.json())
+        .then(() => loadMysqlHistory())
+        .catch(() => {});
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeQrModal();
+        closeResetEepromModal();
+        closeClearMysqlModal();
+      }
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const savedTheme = localStorage.getItem("dashboard_theme") || "dark";
+      applyTheme(savedTheme);
+      connectMqtt();
+      fetchLatestData();
+      loadMysqlHistory();
+      loadDbHistory();
+      setInterval(fetchLatestData, 800);
+      setInterval(loadMysqlHistory, 3500);
+      setInterval(loadDbHistory, 5000);
+    });
+  </script>
+</body>
+
+</html>
